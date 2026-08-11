@@ -45,7 +45,20 @@ function createSupabaseClient() {
       fetch: createSupabaseFetch(SUPABASE_ANON_KEY),
     },
     auth: {
-      storage: typeof window !== 'undefined' ? localStorage : undefined,
+      storage: typeof window !== 'undefined'
+        ? {
+            getItem: (key: string) => {
+              const match = document.cookie.match(new RegExp('(^| )' + key + '=([^;]+)'));
+              return match ? decodeURIComponent(match[2]) : null;
+            },
+            setItem: (key: string, value: string) => {
+              document.cookie = `${key}=${encodeURIComponent(value)}; path=/; max-age=31536000; SameSite=Lax`;
+            },
+            removeItem: (key: string) => {
+              document.cookie = `${key}=; path=/; max-age=0`;
+            },
+          }
+        : undefined,
       persistSession: true,
       autoRefreshToken: true,
     }
