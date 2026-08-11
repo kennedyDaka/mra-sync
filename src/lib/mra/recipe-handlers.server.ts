@@ -5,6 +5,9 @@
  */
 import { z } from "zod";
 import { authenticateTenant, checkRateLimit, errorResponse, json } from "./http.server";
+import { callMra, MRA_PATHS, summarizeErrors } from "./mra-client.server";
+import { readEnv } from "./env.server";
+import { logMraCall } from "./sales.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 async function getDb(): Promise<SupabaseClient> {
@@ -237,4 +240,149 @@ export async function handleDeleteRecipe(request: Request): Promise<Response> {
   if (error) return errorResponse(500, "db_error", error.message);
 
   return json({ deleted: true });
+}
+
+/* -------------------------------------------------- recipe conversion (→ MRA) */
+
+const convertRecipeSchema = z.object({
+  recipe_id: z.string().uuid(),
+  quantity_to_produce: z.number().positive().max(10_000_000),
+  production_batch_id: z.string().max(80).optional(),
+  production_date: z.string().min(1).optional(),
+});
+
+export async function handleConvertRecipe(request: Request): Promise<Response> {
+  const env = readEnv();
+  const db = await getDb();
+
+  const auth = await authenticateTenant(db, request);
+  if (!auth.ok) return auth.response;
+  const ctx = auth.context;
+
+  if (!(await checkRateLimit(db, ctx.tenantId, ctx.rateLimitPerMin))) {
+    return errorResponse(429, "rate_limited", "Too many requests for this tenant");
+  }
+
+  let raw: unknown;
+  try {
+    raw = await request.json();
+  } catch {
+    return errorResponse(400, "invalid_json", "Request body is not valid JSON");
+  }
+
+  const parsed = convertRecipeSchema.safeParse(raw);
+  if (!parsed.success) {
+    return errorResponse(400, "invalid_payload", "Conversion payload failed validation", {
+      issues: parsed.error.issues.map((i) => ({ path: i.path.join("."), message: i.message })),
+    });
+  }
+
+  const terminalKey = request.headers.get("x-terminal-id");
+  if (!terminalKey) {
+    return errorResponse(400, "missing_terminal", "X-Terminal-ID header is required");
+  }
+
+  const { data: terminal } = await db
+    .from("terminals")
+    .select("*")
+    .eq("tenant_id", ctx.tenantId)
+    .eq("terminal_id", terminalKey)
+    .maybeSingle();
+  if (!terminal) {
+    return errorResponse(404, "unknown_terminal", `Terminal ${terminalKey} is not registered`);
+  }
+  if (terminal.status !== "active") {
+    return errorResponse(409, "terminal_inactive", `Terminal ${terminalKey} is not activated`);
+  }
+
+  const { loadCredentials } = await import("@/lib/mra/sales.server");
+  const credentials = await loadCredentials(db, env, terminal.id);
+  if (!credentials) {
+    return errorResponse(409, "terminal_inactive", "Terminal credentials are missing");
+  }
+
+  // Fetch recipe + items
+  const { data: recipe, error: recipeErr } = await db
+    .from("recipes")
+    .select("id, finished_product_code, finished_product_name, conversion_factor, unit_of_measure")
+    .eq("id", parsed.data.recipe_id)
+    .eq("tenant_id", ctx.tenantId)
+    .maybeSingle();
+
+  if (recipeErr) return errorResponse(500, "db_error", recipeErr.message);
+  if (!recipe) return errorResponse(404, "not_found", "Recipe not found");
+  if (!recipe.conversion_factor || recipe.conversion_factor <= 0) {
+    return errorResponse(400, "invalid_recipe", "Recipe has an invalid conversion_factor");
+  }
+
+  const { data: items, error: itemsErr } = await db
+    .from("recipe_items")
+    .select("raw_material_code, raw_material_name, quantity_per_unit, unit_of_measure, waste_factor")
+    .eq("recipe_id", recipe.id);
+
+  if (itemsErr) return errorResponse(500, "db_error", itemsErr.message);
+  if (!items || items.length === 0) {
+    return errorResponse(400, "empty_recipe", "Recipe has no raw material items");
+  }
+
+  const qty = parsed.data.quantity_to_produce;
+
+  // Build raw materials list: quantity_per_unit × quantity_to_produce × (1 + waste_factor)
+  const rawMaterials = items.map((item) => {
+    const waste = item.waste_factor ?? 0;
+    const usedQty = item.quantity_per_unit * qty * (1 + waste);
+    return {
+      productId: item.raw_material_code,
+      productName: item.raw_material_name,
+      availableQuantity: usedQty,
+      usedQuantity: usedQty,
+    };
+  });
+
+  // Build finished products list
+  const finishedProducts = [{
+    barcode: recipe.finished_product_code,
+    productDescription: recipe.finished_product_name,
+    quantity: qty,
+    unitOfMeasure: recipe.unit_of_measure || "unit",
+    expiryDate: null,
+  }];
+
+  const mraPayload = {
+    productionBatchId: parsed.data.production_batch_id ?? null,
+    productionDate: parsed.data.production_date ?? new Date().toISOString().split("T")[0],
+    rawMaterials,
+    finishedProducts,
+  };
+
+  const result = await callMra({
+    env,
+    path: MRA_PATHS.submitConversion,
+    payload: mraPayload,
+    auth: { jwtToken: credentials.jwtToken },
+  });
+
+  await logMraCall(db, {
+    tenantId: ctx.tenantId,
+    terminalUid: terminal.id,
+    endpoint: MRA_PATHS.submitConversion,
+    statusCode: result.httpStatus,
+    durationMs: result.durationMs,
+    ok: result.ok,
+    request: JSON.stringify(mraPayload),
+    response: result.raw,
+  });
+
+  if (!result.ok) {
+    return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
+  }
+
+  return json({
+    status: "converted",
+    recipe_id: recipe.id,
+    finished_product: recipe.finished_product_code,
+    quantity_produced: qty,
+    raw_materials_consumed: rawMaterials.length,
+    mra_data: result.data,
+  });
 }
