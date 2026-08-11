@@ -125,7 +125,7 @@ const activateRes = await step("4. Activate terminal", async () => {
         mac_address: "B4-95-80-46-57-55",
       },
       pos: {
-        product_id: "MRA-middleware/lovable",
+        product_id: "MRA-middleware/mraconnect",
         product_version: "1.0.0",
       },
     },

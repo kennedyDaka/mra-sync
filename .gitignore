@@ -21,8 +21,6 @@ dist-ssr
 .env.*
 !.env.example
 
-# Lovable leftovers
-.lovable/
 
 # Migration scripts with credentials
 run-migrations.mjs
@@ -43,3 +41,4 @@ run-migrations.mjs
 *.sw?
 
 .vercel
+.lovable/
