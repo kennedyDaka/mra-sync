@@ -41,3 +41,5 @@ run-migrations.mjs
 *.njsproj
 *.sln
 *.sw?
+
+.vercel
