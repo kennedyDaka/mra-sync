@@ -1247,8 +1247,29 @@ export async function handleRequestNewTerminalToken(request: Request): Promise<R
   if (!auth.ok) return auth.response;
   const r = await resolveTerminal(request, auth.context.tenantId);
   if ("error" in r) return r.error;
-  const result = await callMra({ env: r.env, path: MRA_PATHS.requestNewTerminalToken, payload: {}, auth: { jwtToken: r.credentials.jwtToken } });
+  const result = await callMra<{ terminalCredentials?: { jwtToken?: string; secretKey?: string } }>({
+    env: r.env,
+    path: MRA_PATHS.requestNewTerminalToken,
+    payload: {},
+    auth: { jwtToken: r.credentials.jwtToken },
+  });
   if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
+
+  const newJwt = result.data?.terminalCredentials?.jwtToken;
+  const newSecret = result.data?.terminalCredentials?.secretKey;
+  if (newJwt && newSecret) {
+    await r.db.from("terminal_secrets").upsert(
+      {
+        terminal_uid: r.terminal.id,
+        tenant_id: auth.context.tenantId,
+        secret_key_enc: await sealSecret(newSecret, r.env.masterKey, r.env.isProduction),
+        session_token_enc: await sealSecret(newJwt, r.env.masterKey, r.env.isProduction),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "terminal_uid" },
+    );
+  }
+
   return json(result.data ?? {});
 }
 
