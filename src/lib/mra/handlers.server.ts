@@ -210,7 +210,12 @@ export async function handleSales(request: Request): Promise<Response> {
     );
   }
 
-  const credentials = await loadCredentials(db, env, terminal.id);
+  let credentials;
+  try {
+    credentials = await loadCredentials(db, env, terminal.id);
+  } catch (e) {
+    return errorResponse(500, "credential_decryption_failed", `Failed to decrypt terminal credentials: ${e instanceof Error ? e.message : String(e)}`);
+  }
   if (!credentials) {
     return errorResponse(409, "terminal_inactive", "Terminal credentials are missing");
   }
@@ -1219,7 +1224,12 @@ async function resolveTerminal(request: Request, tenantId: string) {
   if (!terminal) return { error: errorResponse(404, "unknown_terminal", `Terminal ${terminalKey} is not registered`) };
   if (terminal.status !== "active") return { error: errorResponse(409, "terminal_inactive", `Terminal ${terminalKey} is not active`) };
   const env = readEnv();
-  const credentials = await loadCredentials(db, env, terminal.id);
+  let credentials;
+  try {
+    credentials = await loadCredentials(db, env, terminal.id);
+  } catch (e) {
+    return { error: errorResponse(500, "credential_decryption_failed", `Failed to decrypt terminal credentials: ${e instanceof Error ? e.message : String(e)}`) };
+  }
   if (!credentials) return { error: errorResponse(409, "terminal_inactive", "Terminal credentials missing") };
   return { terminal, credentials, env, db };
 }
