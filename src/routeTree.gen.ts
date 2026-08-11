@@ -19,6 +19,7 @@ import { Route as ApiPublicHooksSyncWorkerRouteImport } from './routes/api/publi
 import { Route as ApiPublicV1BillingRouteImport } from './routes/api/public/v1/billing'
 import { Route as ApiPublicV1ConfigRouteImport } from './routes/api/public/v1/config'
 import { Route as ApiPublicV1HealthRouteImport } from './routes/api/public/v1/health'
+import { Route as ApiPublicV1PingRouteImport } from './routes/api/public/v1/ping'
 import { Route as ApiPublicV1RecipesRouteImport } from './routes/api/public/v1/recipes'
 import { Route as ApiPublicV1SalesRouteImport } from './routes/api/public/v1/sales'
 import { Route as ApiPublicV1InventoryAdjustmentRouteImport } from './routes/api/public/v1/inventory/adjustment'
@@ -27,15 +28,28 @@ import { Route as ApiPublicV1InventoryConvertRouteImport } from './routes/api/pu
 import { Route as ApiPublicV1InventoryInitialUploadRouteImport } from './routes/api/public/v1/inventory/initial-upload'
 import { Route as ApiPublicV1InventoryProductStatusRouteImport } from './routes/api/public/v1/inventory/product-status'
 import { Route as ApiPublicV1InventoryProductsRouteImport } from './routes/api/public/v1/inventory/products'
+import { Route as ApiPublicV1InventoryRawMaterialRouteImport } from './routes/api/public/v1/inventory/raw-material'
 import { Route as ApiPublicV1InventorySyncRouteImport } from './routes/api/public/v1/inventory/sync'
 import { Route as ApiPublicV1InventoryTransferRouteImport } from './routes/api/public/v1/inventory/transfer'
 import { Route as ApiPublicV1InventoryWarehouseRouteImport } from './routes/api/public/v1/inventory/warehouse'
+import { Route as ApiPublicV1RecipesConvertRouteImport } from './routes/api/public/v1/recipes/convert'
+import { Route as ApiPublicV1SalesCancelReceiptRouteImport } from './routes/api/public/v1/sales/cancel-receipt'
 import { Route as ApiPublicV1SalesCreditDebitNoteRouteImport } from './routes/api/public/v1/sales/credit-debit-note'
 import { Route as ApiPublicV1SalesInvoiceByNumberRouteImport } from './routes/api/public/v1/sales/invoice-by-number'
+import { Route as ApiPublicV1SalesLastSubmittedOfflineRouteImport } from './routes/api/public/v1/sales/last-submitted-offline'
+import { Route as ApiPublicV1SalesLastSubmittedOnlineRouteImport } from './routes/api/public/v1/sales/last-submitted-online'
+import { Route as ApiPublicV1SalesVoidReceiptsRouteImport } from './routes/api/public/v1/sales/void-receipts'
 import { Route as ApiPublicV1StockAddProductRouteImport } from './routes/api/public/v1/stock/add-product'
 import { Route as ApiPublicV1StockHsCodesRouteImport } from './routes/api/public/v1/stock/hs-codes'
+import { Route as ApiPublicV1StockInformalPurchaseRouteImport } from './routes/api/public/v1/stock/informal-purchase'
 import { Route as ApiPublicV1StockSuppliersRouteImport } from './routes/api/public/v1/stock/suppliers'
+import { Route as ApiPublicV1StockUnitsOfMeasureRouteImport } from './routes/api/public/v1/stock/units-of-measure'
 import { Route as ApiPublicV1TenantActivateRouteImport } from './routes/api/public/v1/tenant/activate'
+import { Route as ApiPublicV1TenantConfirmActivationRouteImport } from './routes/api/public/v1/tenant/confirm-activation'
+import { Route as ApiPublicV1TenantRefreshTokenRouteImport } from './routes/api/public/v1/tenant/refresh-token'
+import { Route as ApiPublicV1UtilitiesBlockingMessageRouteImport } from './routes/api/public/v1/utilities/blocking-message'
+import { Route as ApiPublicV1UtilitiesUnblockStatusRouteImport } from './routes/api/public/v1/utilities/unblock-status'
+import { Route as ApiPublicV1UtilitiesValidateVat5RouteImport } from './routes/api/public/v1/utilities/validate-vat5'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -88,6 +102,11 @@ const ApiPublicV1HealthRoute = ApiPublicV1HealthRouteImport.update({
   path: '/api/public/v1/health',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicV1PingRoute = ApiPublicV1PingRouteImport.update({
+  id: '/api/public/v1/ping',
+  path: '/api/public/v1/ping',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicV1RecipesRoute = ApiPublicV1RecipesRouteImport.update({
   id: '/api/public/v1/recipes',
   path: '/api/public/v1/recipes',
@@ -134,6 +153,12 @@ const ApiPublicV1InventoryProductsRoute =
     path: '/api/public/v1/inventory/products',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicV1InventoryRawMaterialRoute =
+  ApiPublicV1InventoryRawMaterialRouteImport.update({
+    id: '/api/public/v1/inventory/raw-material',
+    path: '/api/public/v1/inventory/raw-material',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicV1InventorySyncRoute =
   ApiPublicV1InventorySyncRouteImport.update({
     id: '/api/public/v1/inventory/sync',
@@ -152,6 +177,18 @@ const ApiPublicV1InventoryWarehouseRoute =
     path: '/api/public/v1/inventory/warehouse',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicV1RecipesConvertRoute =
+  ApiPublicV1RecipesConvertRouteImport.update({
+    id: '/convert',
+    path: '/convert',
+    getParentRoute: () => ApiPublicV1RecipesRoute,
+  } as any)
+const ApiPublicV1SalesCancelReceiptRoute =
+  ApiPublicV1SalesCancelReceiptRouteImport.update({
+    id: '/cancel-receipt',
+    path: '/cancel-receipt',
+    getParentRoute: () => ApiPublicV1SalesRoute,
+  } as any)
 const ApiPublicV1SalesCreditDebitNoteRoute =
   ApiPublicV1SalesCreditDebitNoteRouteImport.update({
     id: '/credit-debit-note',
@@ -162,6 +199,24 @@ const ApiPublicV1SalesInvoiceByNumberRoute =
   ApiPublicV1SalesInvoiceByNumberRouteImport.update({
     id: '/invoice-by-number',
     path: '/invoice-by-number',
+    getParentRoute: () => ApiPublicV1SalesRoute,
+  } as any)
+const ApiPublicV1SalesLastSubmittedOfflineRoute =
+  ApiPublicV1SalesLastSubmittedOfflineRouteImport.update({
+    id: '/last-submitted-offline',
+    path: '/last-submitted-offline',
+    getParentRoute: () => ApiPublicV1SalesRoute,
+  } as any)
+const ApiPublicV1SalesLastSubmittedOnlineRoute =
+  ApiPublicV1SalesLastSubmittedOnlineRouteImport.update({
+    id: '/last-submitted-online',
+    path: '/last-submitted-online',
+    getParentRoute: () => ApiPublicV1SalesRoute,
+  } as any)
+const ApiPublicV1SalesVoidReceiptsRoute =
+  ApiPublicV1SalesVoidReceiptsRouteImport.update({
+    id: '/void-receipts',
+    path: '/void-receipts',
     getParentRoute: () => ApiPublicV1SalesRoute,
   } as any)
 const ApiPublicV1StockAddProductRoute =
@@ -175,16 +230,58 @@ const ApiPublicV1StockHsCodesRoute = ApiPublicV1StockHsCodesRouteImport.update({
   path: '/api/public/v1/stock/hs-codes',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicV1StockInformalPurchaseRoute =
+  ApiPublicV1StockInformalPurchaseRouteImport.update({
+    id: '/api/public/v1/stock/informal-purchase',
+    path: '/api/public/v1/stock/informal-purchase',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicV1StockSuppliersRoute =
   ApiPublicV1StockSuppliersRouteImport.update({
     id: '/api/public/v1/stock/suppliers',
     path: '/api/public/v1/stock/suppliers',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicV1StockUnitsOfMeasureRoute =
+  ApiPublicV1StockUnitsOfMeasureRouteImport.update({
+    id: '/api/public/v1/stock/units-of-measure',
+    path: '/api/public/v1/stock/units-of-measure',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicV1TenantActivateRoute =
   ApiPublicV1TenantActivateRouteImport.update({
     id: '/api/public/v1/tenant/activate',
     path: '/api/public/v1/tenant/activate',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicV1TenantConfirmActivationRoute =
+  ApiPublicV1TenantConfirmActivationRouteImport.update({
+    id: '/api/public/v1/tenant/confirm-activation',
+    path: '/api/public/v1/tenant/confirm-activation',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicV1TenantRefreshTokenRoute =
+  ApiPublicV1TenantRefreshTokenRouteImport.update({
+    id: '/api/public/v1/tenant/refresh-token',
+    path: '/api/public/v1/tenant/refresh-token',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicV1UtilitiesBlockingMessageRoute =
+  ApiPublicV1UtilitiesBlockingMessageRouteImport.update({
+    id: '/api/public/v1/utilities/blocking-message',
+    path: '/api/public/v1/utilities/blocking-message',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicV1UtilitiesUnblockStatusRoute =
+  ApiPublicV1UtilitiesUnblockStatusRouteImport.update({
+    id: '/api/public/v1/utilities/unblock-status',
+    path: '/api/public/v1/utilities/unblock-status',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicV1UtilitiesValidateVat5Route =
+  ApiPublicV1UtilitiesValidateVat5RouteImport.update({
+    id: '/api/public/v1/utilities/validate-vat5',
+    path: '/api/public/v1/utilities/validate-vat5',
     getParentRoute: () => rootRouteImport,
   } as any)
 
@@ -198,7 +295,8 @@ export interface FileRoutesByFullPath {
   '/api/public/v1/billing': typeof ApiPublicV1BillingRoute
   '/api/public/v1/config': typeof ApiPublicV1ConfigRoute
   '/api/public/v1/health': typeof ApiPublicV1HealthRoute
-  '/api/public/v1/recipes': typeof ApiPublicV1RecipesRoute
+  '/api/public/v1/ping': typeof ApiPublicV1PingRoute
+  '/api/public/v1/recipes': typeof ApiPublicV1RecipesRouteWithChildren
   '/api/public/v1/sales': typeof ApiPublicV1SalesRouteWithChildren
   '/api/public/v1/inventory/adjustment': typeof ApiPublicV1InventoryAdjustmentRoute
   '/api/public/v1/inventory/adjustment-reasons': typeof ApiPublicV1InventoryAdjustmentReasonsRoute
@@ -206,15 +304,28 @@ export interface FileRoutesByFullPath {
   '/api/public/v1/inventory/initial-upload': typeof ApiPublicV1InventoryInitialUploadRoute
   '/api/public/v1/inventory/product-status': typeof ApiPublicV1InventoryProductStatusRoute
   '/api/public/v1/inventory/products': typeof ApiPublicV1InventoryProductsRoute
+  '/api/public/v1/inventory/raw-material': typeof ApiPublicV1InventoryRawMaterialRoute
   '/api/public/v1/inventory/sync': typeof ApiPublicV1InventorySyncRoute
   '/api/public/v1/inventory/transfer': typeof ApiPublicV1InventoryTransferRoute
   '/api/public/v1/inventory/warehouse': typeof ApiPublicV1InventoryWarehouseRoute
+  '/api/public/v1/recipes/convert': typeof ApiPublicV1RecipesConvertRoute
+  '/api/public/v1/sales/cancel-receipt': typeof ApiPublicV1SalesCancelReceiptRoute
   '/api/public/v1/sales/credit-debit-note': typeof ApiPublicV1SalesCreditDebitNoteRoute
   '/api/public/v1/sales/invoice-by-number': typeof ApiPublicV1SalesInvoiceByNumberRoute
+  '/api/public/v1/sales/last-submitted-offline': typeof ApiPublicV1SalesLastSubmittedOfflineRoute
+  '/api/public/v1/sales/last-submitted-online': typeof ApiPublicV1SalesLastSubmittedOnlineRoute
+  '/api/public/v1/sales/void-receipts': typeof ApiPublicV1SalesVoidReceiptsRoute
   '/api/public/v1/stock/add-product': typeof ApiPublicV1StockAddProductRoute
   '/api/public/v1/stock/hs-codes': typeof ApiPublicV1StockHsCodesRoute
+  '/api/public/v1/stock/informal-purchase': typeof ApiPublicV1StockInformalPurchaseRoute
   '/api/public/v1/stock/suppliers': typeof ApiPublicV1StockSuppliersRoute
+  '/api/public/v1/stock/units-of-measure': typeof ApiPublicV1StockUnitsOfMeasureRoute
   '/api/public/v1/tenant/activate': typeof ApiPublicV1TenantActivateRoute
+  '/api/public/v1/tenant/confirm-activation': typeof ApiPublicV1TenantConfirmActivationRoute
+  '/api/public/v1/tenant/refresh-token': typeof ApiPublicV1TenantRefreshTokenRoute
+  '/api/public/v1/utilities/blocking-message': typeof ApiPublicV1UtilitiesBlockingMessageRoute
+  '/api/public/v1/utilities/unblock-status': typeof ApiPublicV1UtilitiesUnblockStatusRoute
+  '/api/public/v1/utilities/validate-vat5': typeof ApiPublicV1UtilitiesValidateVat5Route
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -226,7 +337,8 @@ export interface FileRoutesByTo {
   '/api/public/v1/billing': typeof ApiPublicV1BillingRoute
   '/api/public/v1/config': typeof ApiPublicV1ConfigRoute
   '/api/public/v1/health': typeof ApiPublicV1HealthRoute
-  '/api/public/v1/recipes': typeof ApiPublicV1RecipesRoute
+  '/api/public/v1/ping': typeof ApiPublicV1PingRoute
+  '/api/public/v1/recipes': typeof ApiPublicV1RecipesRouteWithChildren
   '/api/public/v1/sales': typeof ApiPublicV1SalesRouteWithChildren
   '/api/public/v1/inventory/adjustment': typeof ApiPublicV1InventoryAdjustmentRoute
   '/api/public/v1/inventory/adjustment-reasons': typeof ApiPublicV1InventoryAdjustmentReasonsRoute
@@ -234,15 +346,28 @@ export interface FileRoutesByTo {
   '/api/public/v1/inventory/initial-upload': typeof ApiPublicV1InventoryInitialUploadRoute
   '/api/public/v1/inventory/product-status': typeof ApiPublicV1InventoryProductStatusRoute
   '/api/public/v1/inventory/products': typeof ApiPublicV1InventoryProductsRoute
+  '/api/public/v1/inventory/raw-material': typeof ApiPublicV1InventoryRawMaterialRoute
   '/api/public/v1/inventory/sync': typeof ApiPublicV1InventorySyncRoute
   '/api/public/v1/inventory/transfer': typeof ApiPublicV1InventoryTransferRoute
   '/api/public/v1/inventory/warehouse': typeof ApiPublicV1InventoryWarehouseRoute
+  '/api/public/v1/recipes/convert': typeof ApiPublicV1RecipesConvertRoute
+  '/api/public/v1/sales/cancel-receipt': typeof ApiPublicV1SalesCancelReceiptRoute
   '/api/public/v1/sales/credit-debit-note': typeof ApiPublicV1SalesCreditDebitNoteRoute
   '/api/public/v1/sales/invoice-by-number': typeof ApiPublicV1SalesInvoiceByNumberRoute
+  '/api/public/v1/sales/last-submitted-offline': typeof ApiPublicV1SalesLastSubmittedOfflineRoute
+  '/api/public/v1/sales/last-submitted-online': typeof ApiPublicV1SalesLastSubmittedOnlineRoute
+  '/api/public/v1/sales/void-receipts': typeof ApiPublicV1SalesVoidReceiptsRoute
   '/api/public/v1/stock/add-product': typeof ApiPublicV1StockAddProductRoute
   '/api/public/v1/stock/hs-codes': typeof ApiPublicV1StockHsCodesRoute
+  '/api/public/v1/stock/informal-purchase': typeof ApiPublicV1StockInformalPurchaseRoute
   '/api/public/v1/stock/suppliers': typeof ApiPublicV1StockSuppliersRoute
+  '/api/public/v1/stock/units-of-measure': typeof ApiPublicV1StockUnitsOfMeasureRoute
   '/api/public/v1/tenant/activate': typeof ApiPublicV1TenantActivateRoute
+  '/api/public/v1/tenant/confirm-activation': typeof ApiPublicV1TenantConfirmActivationRoute
+  '/api/public/v1/tenant/refresh-token': typeof ApiPublicV1TenantRefreshTokenRoute
+  '/api/public/v1/utilities/blocking-message': typeof ApiPublicV1UtilitiesBlockingMessageRoute
+  '/api/public/v1/utilities/unblock-status': typeof ApiPublicV1UtilitiesUnblockStatusRoute
+  '/api/public/v1/utilities/validate-vat5': typeof ApiPublicV1UtilitiesValidateVat5Route
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -256,7 +381,8 @@ export interface FileRoutesById {
   '/api/public/v1/billing': typeof ApiPublicV1BillingRoute
   '/api/public/v1/config': typeof ApiPublicV1ConfigRoute
   '/api/public/v1/health': typeof ApiPublicV1HealthRoute
-  '/api/public/v1/recipes': typeof ApiPublicV1RecipesRoute
+  '/api/public/v1/ping': typeof ApiPublicV1PingRoute
+  '/api/public/v1/recipes': typeof ApiPublicV1RecipesRouteWithChildren
   '/api/public/v1/sales': typeof ApiPublicV1SalesRouteWithChildren
   '/api/public/v1/inventory/adjustment': typeof ApiPublicV1InventoryAdjustmentRoute
   '/api/public/v1/inventory/adjustment-reasons': typeof ApiPublicV1InventoryAdjustmentReasonsRoute
@@ -264,15 +390,28 @@ export interface FileRoutesById {
   '/api/public/v1/inventory/initial-upload': typeof ApiPublicV1InventoryInitialUploadRoute
   '/api/public/v1/inventory/product-status': typeof ApiPublicV1InventoryProductStatusRoute
   '/api/public/v1/inventory/products': typeof ApiPublicV1InventoryProductsRoute
+  '/api/public/v1/inventory/raw-material': typeof ApiPublicV1InventoryRawMaterialRoute
   '/api/public/v1/inventory/sync': typeof ApiPublicV1InventorySyncRoute
   '/api/public/v1/inventory/transfer': typeof ApiPublicV1InventoryTransferRoute
   '/api/public/v1/inventory/warehouse': typeof ApiPublicV1InventoryWarehouseRoute
+  '/api/public/v1/recipes/convert': typeof ApiPublicV1RecipesConvertRoute
+  '/api/public/v1/sales/cancel-receipt': typeof ApiPublicV1SalesCancelReceiptRoute
   '/api/public/v1/sales/credit-debit-note': typeof ApiPublicV1SalesCreditDebitNoteRoute
   '/api/public/v1/sales/invoice-by-number': typeof ApiPublicV1SalesInvoiceByNumberRoute
+  '/api/public/v1/sales/last-submitted-offline': typeof ApiPublicV1SalesLastSubmittedOfflineRoute
+  '/api/public/v1/sales/last-submitted-online': typeof ApiPublicV1SalesLastSubmittedOnlineRoute
+  '/api/public/v1/sales/void-receipts': typeof ApiPublicV1SalesVoidReceiptsRoute
   '/api/public/v1/stock/add-product': typeof ApiPublicV1StockAddProductRoute
   '/api/public/v1/stock/hs-codes': typeof ApiPublicV1StockHsCodesRoute
+  '/api/public/v1/stock/informal-purchase': typeof ApiPublicV1StockInformalPurchaseRoute
   '/api/public/v1/stock/suppliers': typeof ApiPublicV1StockSuppliersRoute
+  '/api/public/v1/stock/units-of-measure': typeof ApiPublicV1StockUnitsOfMeasureRoute
   '/api/public/v1/tenant/activate': typeof ApiPublicV1TenantActivateRoute
+  '/api/public/v1/tenant/confirm-activation': typeof ApiPublicV1TenantConfirmActivationRoute
+  '/api/public/v1/tenant/refresh-token': typeof ApiPublicV1TenantRefreshTokenRoute
+  '/api/public/v1/utilities/blocking-message': typeof ApiPublicV1UtilitiesBlockingMessageRoute
+  '/api/public/v1/utilities/unblock-status': typeof ApiPublicV1UtilitiesUnblockStatusRoute
+  '/api/public/v1/utilities/validate-vat5': typeof ApiPublicV1UtilitiesValidateVat5Route
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -286,6 +425,7 @@ export interface FileRouteTypes {
     | '/api/public/v1/billing'
     | '/api/public/v1/config'
     | '/api/public/v1/health'
+    | '/api/public/v1/ping'
     | '/api/public/v1/recipes'
     | '/api/public/v1/sales'
     | '/api/public/v1/inventory/adjustment'
@@ -294,15 +434,28 @@ export interface FileRouteTypes {
     | '/api/public/v1/inventory/initial-upload'
     | '/api/public/v1/inventory/product-status'
     | '/api/public/v1/inventory/products'
+    | '/api/public/v1/inventory/raw-material'
     | '/api/public/v1/inventory/sync'
     | '/api/public/v1/inventory/transfer'
     | '/api/public/v1/inventory/warehouse'
+    | '/api/public/v1/recipes/convert'
+    | '/api/public/v1/sales/cancel-receipt'
     | '/api/public/v1/sales/credit-debit-note'
     | '/api/public/v1/sales/invoice-by-number'
+    | '/api/public/v1/sales/last-submitted-offline'
+    | '/api/public/v1/sales/last-submitted-online'
+    | '/api/public/v1/sales/void-receipts'
     | '/api/public/v1/stock/add-product'
     | '/api/public/v1/stock/hs-codes'
+    | '/api/public/v1/stock/informal-purchase'
     | '/api/public/v1/stock/suppliers'
+    | '/api/public/v1/stock/units-of-measure'
     | '/api/public/v1/tenant/activate'
+    | '/api/public/v1/tenant/confirm-activation'
+    | '/api/public/v1/tenant/refresh-token'
+    | '/api/public/v1/utilities/blocking-message'
+    | '/api/public/v1/utilities/unblock-status'
+    | '/api/public/v1/utilities/validate-vat5'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -314,6 +467,7 @@ export interface FileRouteTypes {
     | '/api/public/v1/billing'
     | '/api/public/v1/config'
     | '/api/public/v1/health'
+    | '/api/public/v1/ping'
     | '/api/public/v1/recipes'
     | '/api/public/v1/sales'
     | '/api/public/v1/inventory/adjustment'
@@ -322,15 +476,28 @@ export interface FileRouteTypes {
     | '/api/public/v1/inventory/initial-upload'
     | '/api/public/v1/inventory/product-status'
     | '/api/public/v1/inventory/products'
+    | '/api/public/v1/inventory/raw-material'
     | '/api/public/v1/inventory/sync'
     | '/api/public/v1/inventory/transfer'
     | '/api/public/v1/inventory/warehouse'
+    | '/api/public/v1/recipes/convert'
+    | '/api/public/v1/sales/cancel-receipt'
     | '/api/public/v1/sales/credit-debit-note'
     | '/api/public/v1/sales/invoice-by-number'
+    | '/api/public/v1/sales/last-submitted-offline'
+    | '/api/public/v1/sales/last-submitted-online'
+    | '/api/public/v1/sales/void-receipts'
     | '/api/public/v1/stock/add-product'
     | '/api/public/v1/stock/hs-codes'
+    | '/api/public/v1/stock/informal-purchase'
     | '/api/public/v1/stock/suppliers'
+    | '/api/public/v1/stock/units-of-measure'
     | '/api/public/v1/tenant/activate'
+    | '/api/public/v1/tenant/confirm-activation'
+    | '/api/public/v1/tenant/refresh-token'
+    | '/api/public/v1/utilities/blocking-message'
+    | '/api/public/v1/utilities/unblock-status'
+    | '/api/public/v1/utilities/validate-vat5'
   id:
     | '__root__'
     | '/'
@@ -343,6 +510,7 @@ export interface FileRouteTypes {
     | '/api/public/v1/billing'
     | '/api/public/v1/config'
     | '/api/public/v1/health'
+    | '/api/public/v1/ping'
     | '/api/public/v1/recipes'
     | '/api/public/v1/sales'
     | '/api/public/v1/inventory/adjustment'
@@ -351,15 +519,28 @@ export interface FileRouteTypes {
     | '/api/public/v1/inventory/initial-upload'
     | '/api/public/v1/inventory/product-status'
     | '/api/public/v1/inventory/products'
+    | '/api/public/v1/inventory/raw-material'
     | '/api/public/v1/inventory/sync'
     | '/api/public/v1/inventory/transfer'
     | '/api/public/v1/inventory/warehouse'
+    | '/api/public/v1/recipes/convert'
+    | '/api/public/v1/sales/cancel-receipt'
     | '/api/public/v1/sales/credit-debit-note'
     | '/api/public/v1/sales/invoice-by-number'
+    | '/api/public/v1/sales/last-submitted-offline'
+    | '/api/public/v1/sales/last-submitted-online'
+    | '/api/public/v1/sales/void-receipts'
     | '/api/public/v1/stock/add-product'
     | '/api/public/v1/stock/hs-codes'
+    | '/api/public/v1/stock/informal-purchase'
     | '/api/public/v1/stock/suppliers'
+    | '/api/public/v1/stock/units-of-measure'
     | '/api/public/v1/tenant/activate'
+    | '/api/public/v1/tenant/confirm-activation'
+    | '/api/public/v1/tenant/refresh-token'
+    | '/api/public/v1/utilities/blocking-message'
+    | '/api/public/v1/utilities/unblock-status'
+    | '/api/public/v1/utilities/validate-vat5'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -372,7 +553,8 @@ export interface RootRouteChildren {
   ApiPublicV1BillingRoute: typeof ApiPublicV1BillingRoute
   ApiPublicV1ConfigRoute: typeof ApiPublicV1ConfigRoute
   ApiPublicV1HealthRoute: typeof ApiPublicV1HealthRoute
-  ApiPublicV1RecipesRoute: typeof ApiPublicV1RecipesRoute
+  ApiPublicV1PingRoute: typeof ApiPublicV1PingRoute
+  ApiPublicV1RecipesRoute: typeof ApiPublicV1RecipesRouteWithChildren
   ApiPublicV1SalesRoute: typeof ApiPublicV1SalesRouteWithChildren
   ApiPublicV1InventoryAdjustmentRoute: typeof ApiPublicV1InventoryAdjustmentRoute
   ApiPublicV1InventoryAdjustmentReasonsRoute: typeof ApiPublicV1InventoryAdjustmentReasonsRoute
@@ -380,13 +562,21 @@ export interface RootRouteChildren {
   ApiPublicV1InventoryInitialUploadRoute: typeof ApiPublicV1InventoryInitialUploadRoute
   ApiPublicV1InventoryProductStatusRoute: typeof ApiPublicV1InventoryProductStatusRoute
   ApiPublicV1InventoryProductsRoute: typeof ApiPublicV1InventoryProductsRoute
+  ApiPublicV1InventoryRawMaterialRoute: typeof ApiPublicV1InventoryRawMaterialRoute
   ApiPublicV1InventorySyncRoute: typeof ApiPublicV1InventorySyncRoute
   ApiPublicV1InventoryTransferRoute: typeof ApiPublicV1InventoryTransferRoute
   ApiPublicV1InventoryWarehouseRoute: typeof ApiPublicV1InventoryWarehouseRoute
   ApiPublicV1StockAddProductRoute: typeof ApiPublicV1StockAddProductRoute
   ApiPublicV1StockHsCodesRoute: typeof ApiPublicV1StockHsCodesRoute
+  ApiPublicV1StockInformalPurchaseRoute: typeof ApiPublicV1StockInformalPurchaseRoute
   ApiPublicV1StockSuppliersRoute: typeof ApiPublicV1StockSuppliersRoute
+  ApiPublicV1StockUnitsOfMeasureRoute: typeof ApiPublicV1StockUnitsOfMeasureRoute
   ApiPublicV1TenantActivateRoute: typeof ApiPublicV1TenantActivateRoute
+  ApiPublicV1TenantConfirmActivationRoute: typeof ApiPublicV1TenantConfirmActivationRoute
+  ApiPublicV1TenantRefreshTokenRoute: typeof ApiPublicV1TenantRefreshTokenRoute
+  ApiPublicV1UtilitiesBlockingMessageRoute: typeof ApiPublicV1UtilitiesBlockingMessageRoute
+  ApiPublicV1UtilitiesUnblockStatusRoute: typeof ApiPublicV1UtilitiesUnblockStatusRoute
+  ApiPublicV1UtilitiesValidateVat5Route: typeof ApiPublicV1UtilitiesValidateVat5Route
 }
 
 declare module '@tanstack/react-router' {
@@ -461,6 +651,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicV1HealthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/v1/ping': {
+      id: '/api/public/v1/ping'
+      path: '/api/public/v1/ping'
+      fullPath: '/api/public/v1/ping'
+      preLoaderRoute: typeof ApiPublicV1PingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/v1/recipes': {
       id: '/api/public/v1/recipes'
       path: '/api/public/v1/recipes'
@@ -517,6 +714,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicV1InventoryProductsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/v1/inventory/raw-material': {
+      id: '/api/public/v1/inventory/raw-material'
+      path: '/api/public/v1/inventory/raw-material'
+      fullPath: '/api/public/v1/inventory/raw-material'
+      preLoaderRoute: typeof ApiPublicV1InventoryRawMaterialRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/v1/inventory/sync': {
       id: '/api/public/v1/inventory/sync'
       path: '/api/public/v1/inventory/sync'
@@ -538,6 +742,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicV1InventoryWarehouseRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/v1/recipes/convert': {
+      id: '/api/public/v1/recipes/convert'
+      path: '/convert'
+      fullPath: '/api/public/v1/recipes/convert'
+      preLoaderRoute: typeof ApiPublicV1RecipesConvertRouteImport
+      parentRoute: typeof ApiPublicV1RecipesRoute
+    }
+    '/api/public/v1/sales/cancel-receipt': {
+      id: '/api/public/v1/sales/cancel-receipt'
+      path: '/cancel-receipt'
+      fullPath: '/api/public/v1/sales/cancel-receipt'
+      preLoaderRoute: typeof ApiPublicV1SalesCancelReceiptRouteImport
+      parentRoute: typeof ApiPublicV1SalesRoute
+    }
     '/api/public/v1/sales/credit-debit-note': {
       id: '/api/public/v1/sales/credit-debit-note'
       path: '/credit-debit-note'
@@ -550,6 +768,27 @@ declare module '@tanstack/react-router' {
       path: '/invoice-by-number'
       fullPath: '/api/public/v1/sales/invoice-by-number'
       preLoaderRoute: typeof ApiPublicV1SalesInvoiceByNumberRouteImport
+      parentRoute: typeof ApiPublicV1SalesRoute
+    }
+    '/api/public/v1/sales/last-submitted-offline': {
+      id: '/api/public/v1/sales/last-submitted-offline'
+      path: '/last-submitted-offline'
+      fullPath: '/api/public/v1/sales/last-submitted-offline'
+      preLoaderRoute: typeof ApiPublicV1SalesLastSubmittedOfflineRouteImport
+      parentRoute: typeof ApiPublicV1SalesRoute
+    }
+    '/api/public/v1/sales/last-submitted-online': {
+      id: '/api/public/v1/sales/last-submitted-online'
+      path: '/last-submitted-online'
+      fullPath: '/api/public/v1/sales/last-submitted-online'
+      preLoaderRoute: typeof ApiPublicV1SalesLastSubmittedOnlineRouteImport
+      parentRoute: typeof ApiPublicV1SalesRoute
+    }
+    '/api/public/v1/sales/void-receipts': {
+      id: '/api/public/v1/sales/void-receipts'
+      path: '/void-receipts'
+      fullPath: '/api/public/v1/sales/void-receipts'
+      preLoaderRoute: typeof ApiPublicV1SalesVoidReceiptsRouteImport
       parentRoute: typeof ApiPublicV1SalesRoute
     }
     '/api/public/v1/stock/add-product': {
@@ -566,6 +805,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicV1StockHsCodesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/v1/stock/informal-purchase': {
+      id: '/api/public/v1/stock/informal-purchase'
+      path: '/api/public/v1/stock/informal-purchase'
+      fullPath: '/api/public/v1/stock/informal-purchase'
+      preLoaderRoute: typeof ApiPublicV1StockInformalPurchaseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/v1/stock/suppliers': {
       id: '/api/public/v1/stock/suppliers'
       path: '/api/public/v1/stock/suppliers'
@@ -573,11 +819,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicV1StockSuppliersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/v1/stock/units-of-measure': {
+      id: '/api/public/v1/stock/units-of-measure'
+      path: '/api/public/v1/stock/units-of-measure'
+      fullPath: '/api/public/v1/stock/units-of-measure'
+      preLoaderRoute: typeof ApiPublicV1StockUnitsOfMeasureRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/v1/tenant/activate': {
       id: '/api/public/v1/tenant/activate'
       path: '/api/public/v1/tenant/activate'
       fullPath: '/api/public/v1/tenant/activate'
       preLoaderRoute: typeof ApiPublicV1TenantActivateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/v1/tenant/confirm-activation': {
+      id: '/api/public/v1/tenant/confirm-activation'
+      path: '/api/public/v1/tenant/confirm-activation'
+      fullPath: '/api/public/v1/tenant/confirm-activation'
+      preLoaderRoute: typeof ApiPublicV1TenantConfirmActivationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/v1/tenant/refresh-token': {
+      id: '/api/public/v1/tenant/refresh-token'
+      path: '/api/public/v1/tenant/refresh-token'
+      fullPath: '/api/public/v1/tenant/refresh-token'
+      preLoaderRoute: typeof ApiPublicV1TenantRefreshTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/v1/utilities/blocking-message': {
+      id: '/api/public/v1/utilities/blocking-message'
+      path: '/api/public/v1/utilities/blocking-message'
+      fullPath: '/api/public/v1/utilities/blocking-message'
+      preLoaderRoute: typeof ApiPublicV1UtilitiesBlockingMessageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/v1/utilities/unblock-status': {
+      id: '/api/public/v1/utilities/unblock-status'
+      path: '/api/public/v1/utilities/unblock-status'
+      fullPath: '/api/public/v1/utilities/unblock-status'
+      preLoaderRoute: typeof ApiPublicV1UtilitiesUnblockStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/v1/utilities/validate-vat5': {
+      id: '/api/public/v1/utilities/validate-vat5'
+      path: '/api/public/v1/utilities/validate-vat5'
+      fullPath: '/api/public/v1/utilities/validate-vat5'
+      preLoaderRoute: typeof ApiPublicV1UtilitiesValidateVat5RouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -594,14 +882,35 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
 const AuthenticatedRouteRouteWithChildren =
   AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
 
+interface ApiPublicV1RecipesRouteChildren {
+  ApiPublicV1RecipesConvertRoute: typeof ApiPublicV1RecipesConvertRoute
+}
+
+const ApiPublicV1RecipesRouteChildren: ApiPublicV1RecipesRouteChildren = {
+  ApiPublicV1RecipesConvertRoute: ApiPublicV1RecipesConvertRoute,
+}
+
+const ApiPublicV1RecipesRouteWithChildren =
+  ApiPublicV1RecipesRoute._addFileChildren(ApiPublicV1RecipesRouteChildren)
+
 interface ApiPublicV1SalesRouteChildren {
+  ApiPublicV1SalesCancelReceiptRoute: typeof ApiPublicV1SalesCancelReceiptRoute
   ApiPublicV1SalesCreditDebitNoteRoute: typeof ApiPublicV1SalesCreditDebitNoteRoute
   ApiPublicV1SalesInvoiceByNumberRoute: typeof ApiPublicV1SalesInvoiceByNumberRoute
+  ApiPublicV1SalesLastSubmittedOfflineRoute: typeof ApiPublicV1SalesLastSubmittedOfflineRoute
+  ApiPublicV1SalesLastSubmittedOnlineRoute: typeof ApiPublicV1SalesLastSubmittedOnlineRoute
+  ApiPublicV1SalesVoidReceiptsRoute: typeof ApiPublicV1SalesVoidReceiptsRoute
 }
 
 const ApiPublicV1SalesRouteChildren: ApiPublicV1SalesRouteChildren = {
+  ApiPublicV1SalesCancelReceiptRoute: ApiPublicV1SalesCancelReceiptRoute,
   ApiPublicV1SalesCreditDebitNoteRoute: ApiPublicV1SalesCreditDebitNoteRoute,
   ApiPublicV1SalesInvoiceByNumberRoute: ApiPublicV1SalesInvoiceByNumberRoute,
+  ApiPublicV1SalesLastSubmittedOfflineRoute:
+    ApiPublicV1SalesLastSubmittedOfflineRoute,
+  ApiPublicV1SalesLastSubmittedOnlineRoute:
+    ApiPublicV1SalesLastSubmittedOnlineRoute,
+  ApiPublicV1SalesVoidReceiptsRoute: ApiPublicV1SalesVoidReceiptsRoute,
 }
 
 const ApiPublicV1SalesRouteWithChildren =
@@ -617,7 +926,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicV1BillingRoute: ApiPublicV1BillingRoute,
   ApiPublicV1ConfigRoute: ApiPublicV1ConfigRoute,
   ApiPublicV1HealthRoute: ApiPublicV1HealthRoute,
-  ApiPublicV1RecipesRoute: ApiPublicV1RecipesRoute,
+  ApiPublicV1PingRoute: ApiPublicV1PingRoute,
+  ApiPublicV1RecipesRoute: ApiPublicV1RecipesRouteWithChildren,
   ApiPublicV1SalesRoute: ApiPublicV1SalesRouteWithChildren,
   ApiPublicV1InventoryAdjustmentRoute: ApiPublicV1InventoryAdjustmentRoute,
   ApiPublicV1InventoryAdjustmentReasonsRoute:
@@ -628,13 +938,24 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicV1InventoryProductStatusRoute:
     ApiPublicV1InventoryProductStatusRoute,
   ApiPublicV1InventoryProductsRoute: ApiPublicV1InventoryProductsRoute,
+  ApiPublicV1InventoryRawMaterialRoute: ApiPublicV1InventoryRawMaterialRoute,
   ApiPublicV1InventorySyncRoute: ApiPublicV1InventorySyncRoute,
   ApiPublicV1InventoryTransferRoute: ApiPublicV1InventoryTransferRoute,
   ApiPublicV1InventoryWarehouseRoute: ApiPublicV1InventoryWarehouseRoute,
   ApiPublicV1StockAddProductRoute: ApiPublicV1StockAddProductRoute,
   ApiPublicV1StockHsCodesRoute: ApiPublicV1StockHsCodesRoute,
+  ApiPublicV1StockInformalPurchaseRoute: ApiPublicV1StockInformalPurchaseRoute,
   ApiPublicV1StockSuppliersRoute: ApiPublicV1StockSuppliersRoute,
+  ApiPublicV1StockUnitsOfMeasureRoute: ApiPublicV1StockUnitsOfMeasureRoute,
   ApiPublicV1TenantActivateRoute: ApiPublicV1TenantActivateRoute,
+  ApiPublicV1TenantConfirmActivationRoute:
+    ApiPublicV1TenantConfirmActivationRoute,
+  ApiPublicV1TenantRefreshTokenRoute: ApiPublicV1TenantRefreshTokenRoute,
+  ApiPublicV1UtilitiesBlockingMessageRoute:
+    ApiPublicV1UtilitiesBlockingMessageRoute,
+  ApiPublicV1UtilitiesUnblockStatusRoute:
+    ApiPublicV1UtilitiesUnblockStatusRoute,
+  ApiPublicV1UtilitiesValidateVat5Route: ApiPublicV1UtilitiesValidateVat5Route,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

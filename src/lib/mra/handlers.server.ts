@@ -1148,3 +1148,173 @@ export async function issueApiToken(
   if (error) throw new Error(error.message);
   return token;
 }
+
+/* -------------------------------------------------- missing MRA endpoints */
+
+async function resolveTerminal(request: Request, tenantId: string) {
+  const terminalKey = request.headers.get("x-terminal-id");
+  if (!terminalKey) return { error: errorResponse(400, "missing_terminal", "X-Terminal-ID header is required") };
+  const db = await getDb();
+  const { data: terminal } = await db
+    .from("terminals")
+    .select(TERMINAL_COLUMNS)
+    .eq("tenant_id", tenantId)
+    .eq("terminal_id", terminalKey)
+    .maybeSingle();
+  if (!terminal) return { error: errorResponse(404, "unknown_terminal", `Terminal ${terminalKey} is not registered`) };
+  if (terminal.status !== "active") return { error: errorResponse(409, "terminal_inactive", `Terminal ${terminalKey} is not active`) };
+  const env = readEnv();
+  const credentials = await loadCredentials(db, env, terminal.id);
+  if (!credentials) return { error: errorResponse(409, "terminal_inactive", "Terminal credentials missing") };
+  return { terminal, credentials, env, db };
+}
+
+export async function handlePing(request: Request): Promise<Response> {
+  const auth = await authenticateTenant(await getDb(), request);
+  if (!auth.ok) return auth.response;
+  const r = await resolveTerminal(request, auth.context.tenantId);
+  if ("error" in r) return r.error;
+  const result = await callMra({ env: r.env, path: MRA_PATHS.ping, payload: {}, auth: { jwtToken: r.credentials.jwtToken } });
+  if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
+  return json(result.data ?? { status: "pong" });
+}
+
+export async function handleLastSubmittedOnline(request: Request): Promise<Response> {
+  const auth = await authenticateTenant(await getDb(), request);
+  if (!auth.ok) return auth.response;
+  const r = await resolveTerminal(request, auth.context.tenantId);
+  if ("error" in r) return r.error;
+  const body = await request.json().catch(() => ({}));
+  const result = await callMra({ env: r.env, path: MRA_PATHS.lastSubmittedOnline, payload: body, auth: { jwtToken: r.credentials.jwtToken } });
+  if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
+  return json(result.data ?? {});
+}
+
+export async function handleLastSubmittedOffline(request: Request): Promise<Response> {
+  const auth = await authenticateTenant(await getDb(), request);
+  if (!auth.ok) return auth.response;
+  const r = await resolveTerminal(request, auth.context.tenantId);
+  if ("error" in r) return r.error;
+  const body = await request.json().catch(() => ({}));
+  const result = await callMra({ env: r.env, path: MRA_PATHS.lastSubmittedOffline, payload: body, auth: { jwtToken: r.credentials.jwtToken } });
+  if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
+  return json(result.data ?? {});
+}
+
+export async function handleCancelReceipt(request: Request): Promise<Response> {
+  const auth = await authenticateTenant(await getDb(), request);
+  if (!auth.ok) return auth.response;
+  const r = await resolveTerminal(request, auth.context.tenantId);
+  if ("error" in r) return r.error;
+  let raw: unknown;
+  try { raw = await request.json(); } catch { return errorResponse(400, "invalid_json", "Request body is not valid JSON"); }
+  const result = await callMra({ env: r.env, path: MRA_PATHS.cancelReceipt, payload: raw, auth: { jwtToken: r.credentials.jwtToken } });
+  await logMraCall(r.db, { tenantId: auth.context.tenantId, terminalUid: r.terminal.id, endpoint: MRA_PATHS.cancelReceipt, statusCode: result.httpStatus, durationMs: result.durationMs, ok: result.ok, request: JSON.stringify(raw), response: result.raw });
+  if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
+  return json(result.data ?? { status: "cancelled" });
+}
+
+export async function handleGetVoidReceipts(request: Request): Promise<Response> {
+  const auth = await authenticateTenant(await getDb(), request);
+  if (!auth.ok) return auth.response;
+  const r = await resolveTerminal(request, auth.context.tenantId);
+  if ("error" in r) return r.error;
+  const result = await callMra({ env: r.env, path: MRA_PATHS.getVoidReceipts, payload: {}, auth: { jwtToken: r.credentials.jwtToken } });
+  if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
+  return json(result.data ?? { voids: [] });
+}
+
+export async function handleTerminalActivatedConfirmation(request: Request): Promise<Response> {
+  let raw: unknown;
+  try { raw = await request.json(); } catch { return errorResponse(400, "invalid_json", "Request body is not valid JSON"); }
+  const env = readEnv();
+  const db = await getDb();
+  const terminalKey = request.headers.get("x-terminal-id");
+  if (!terminalKey) return errorResponse(400, "missing_terminal", "X-Terminal-ID header is required");
+  const { data: terminal } = await db.from("terminals").select(TERMINAL_COLUMNS).eq("terminal_id", terminalKey).maybeSingle();
+  if (!terminal) return errorResponse(404, "unknown_terminal", "Terminal not found");
+  const credentials = await loadCredentials(db, env, terminal.id);
+  if (!credentials) return errorResponse(409, "terminal_inactive", "Terminal credentials missing");
+  const typedRaw = raw as Record<string, unknown>;
+  const signature = await hmacSha512Base64(env.masterKey, (typedRaw["tac"] as string) ?? "");
+  const result = await callMra({ env, path: MRA_PATHS.terminalActivatedConfirmation, payload: typedRaw, auth: { jwtToken: credentials.jwtToken, xSignature: signature } });
+  if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
+  return json(result.data ?? { status: "confirmed" });
+}
+
+export async function handleRequestNewTerminalToken(request: Request): Promise<Response> {
+  const auth = await authenticateTenant(await getDb(), request);
+  if (!auth.ok) return auth.response;
+  const r = await resolveTerminal(request, auth.context.tenantId);
+  if ("error" in r) return r.error;
+  const result = await callMra({ env: r.env, path: MRA_PATHS.requestNewTerminalToken, payload: {}, auth: { jwtToken: r.credentials.jwtToken } });
+  if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
+  return json(result.data ?? {});
+}
+
+export async function handleValidateVat5(request: Request): Promise<Response> {
+  const auth = await authenticateTenant(await getDb(), request);
+  if (!auth.ok) return auth.response;
+  const r = await resolveTerminal(request, auth.context.tenantId);
+  if ("error" in r) return r.error;
+  let raw: unknown;
+  try { raw = await request.json(); } catch { return errorResponse(400, "invalid_json", "Request body is not valid JSON"); }
+  const result = await callMra({ env: r.env, path: MRA_PATHS.validateVat5, payload: raw, auth: { jwtToken: r.credentials.jwtToken } });
+  if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
+  return json(result.data ?? {});
+}
+
+export async function handleTerminalBlockingMessage(request: Request): Promise<Response> {
+  const auth = await authenticateTenant(await getDb(), request);
+  if (!auth.ok) return auth.response;
+  const r = await resolveTerminal(request, auth.context.tenantId);
+  if ("error" in r) return r.error;
+  const result = await callMra({ env: r.env, path: MRA_PATHS.terminalBlockingMessage, payload: {}, auth: { jwtToken: r.credentials.jwtToken } });
+  if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
+  return json(result.data ?? {});
+}
+
+export async function handleCheckTerminalUnblockStatus(request: Request): Promise<Response> {
+  const auth = await authenticateTenant(await getDb(), request);
+  if (!auth.ok) return auth.response;
+  const r = await resolveTerminal(request, auth.context.tenantId);
+  if ("error" in r) return r.error;
+  const result = await callMra({ env: r.env, path: MRA_PATHS.checkTerminalUnblockStatus, payload: {}, auth: { jwtToken: r.credentials.jwtToken } });
+  if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
+  return json(result.data ?? {});
+}
+
+export async function handleGetUnitsOfMeasure(request: Request): Promise<Response> {
+  const auth = await authenticateTenant(await getDb(), request);
+  if (!auth.ok) return auth.response;
+  const r = await resolveTerminal(request, auth.context.tenantId);
+  if ("error" in r) return r.error;
+  const result = await callMra({ env: r.env, path: MRA_PATHS.getUnitsOfMeasure, payload: {}, auth: { jwtToken: r.credentials.jwtToken } });
+  if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
+  return json(result.data ?? { units: [] });
+}
+
+export async function handleGetRawMaterial(request: Request): Promise<Response> {
+  const auth = await authenticateTenant(await getDb(), request);
+  if (!auth.ok) return auth.response;
+  const r = await resolveTerminal(request, auth.context.tenantId);
+  if ("error" in r) return r.error;
+  let raw: unknown;
+  try { raw = await request.json(); } catch { raw = {}; }
+  const result = await callMra({ env: r.env, path: MRA_PATHS.getRawMaterial, payload: raw, auth: { jwtToken: r.credentials.jwtToken } });
+  if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
+  return json(result.data ?? {});
+}
+
+export async function handleSubmitInformalPurchase(request: Request): Promise<Response> {
+  const auth = await authenticateTenant(await getDb(), request);
+  if (!auth.ok) return auth.response;
+  const r = await resolveTerminal(request, auth.context.tenantId);
+  if ("error" in r) return r.error;
+  let raw: unknown;
+  try { raw = await request.json(); } catch { return errorResponse(400, "invalid_json", "Request body is not valid JSON"); }
+  const result = await callMra({ env: r.env, path: MRA_PATHS.submitInformalPurchase, payload: raw, auth: { jwtToken: r.credentials.jwtToken } });
+  await logMraCall(r.db, { tenantId: auth.context.tenantId, terminalUid: r.terminal.id, endpoint: MRA_PATHS.submitInformalPurchase, statusCode: result.httpStatus, durationMs: result.durationMs, ok: result.ok, request: JSON.stringify(raw), response: result.raw });
+  if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
+  return json(result.data ?? { status: "submitted" });
+}
