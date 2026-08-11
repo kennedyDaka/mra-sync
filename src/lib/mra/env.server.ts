@@ -45,6 +45,19 @@ export function readEnv(): MraEnv {
     );
   }
 
+  // Production must have Supabase credentials
+  if (isProduction) {
+    const required = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_JWT_SECRET"] as const;
+    for (const key of required) {
+      if (!process.env[key]) {
+        throw new Error(`Missing required production env var: ${key}`);
+      }
+    }
+    if (masterKey.length < 32) {
+      throw new Error("MRA_MASTER_KEY must be at least 32 characters in production");
+    }
+  }
+
   return {
     mode,
     baseUrl,

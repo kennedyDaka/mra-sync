@@ -7,6 +7,7 @@ const ALLOWED_ORIGINS_PROD = [
   "https://mraconnect.app",
   "https://www.mraconnect.app",
   "https://api.mraconnect.app",
+  "https://mra-sync-nexus-main.vercel.app",
 ];
 
 /** Returns the allowed CORS origin for the current request. */
