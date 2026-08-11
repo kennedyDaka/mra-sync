@@ -96,16 +96,16 @@ export async function callMra<T = unknown>(options: {
 }): Promise<MraCallResult<T>> {
   const { env, path, payload, auth } = options;
   const method = options.method ?? "POST";
-  const body = method === "GET" ? null : JSON.stringify(payload ?? {});
+  const body = method === "GET" ? null : (payload === null ? "" : JSON.stringify(payload ?? {}));
   const started = Date.now();
 
   const headers: Record<string, string> = {
-    accept: "application/json",
+    accept: "text/plain",
     "content-type": "application/json",
   };
   if (auth?.accessKey) headers["x-access-key"] = auth.accessKey;
   if (auth?.xSignature) headers["x-signature"] = auth.xSignature;
-  if (auth?.jwtToken) headers["authorization"] = `Bearer ${auth.jwtToken}`;
+  if (auth?.jwtToken) headers["authorization"] = auth.jwtToken;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? env.timeoutMs);
