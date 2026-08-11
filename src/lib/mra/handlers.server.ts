@@ -358,7 +358,7 @@ export async function handleSales(request: Request): Promise<Response> {
 
   if (isOffline) return enqueue("Invoice flagged offline by POS");
 
-  const outcome = await submitInvoiceToMra({
+  let outcome = await submitInvoiceToMra({
     db,
     env,
     tenantId: ctx.tenantId,
@@ -367,6 +367,34 @@ export async function handleSales(request: Request): Promise<Response> {
     credentials,
     timeoutMs: env.timeoutMs,
   });
+
+  // Auto-retry on 401 (expired JWT): refresh token and retry once.
+  if (!outcome.submitted && outcome.httpStatus === 401) {
+    const { handleRequestNewTerminalToken } = await import("./handlers.server");
+    const refreshReq = new Request("http://localhost/refresh", {
+      method: "POST",
+      headers: {
+        authorization: request.headers.get("authorization") ?? "",
+        "x-terminal-id": terminalKey,
+        "content-type": "application/json",
+      },
+    });
+    const refreshResp = await handleRequestNewTerminalToken(refreshReq);
+    if (refreshResp.ok) {
+      const freshCreds = await loadCredentials(db, env, terminal.id);
+      if (freshCreds) {
+        outcome = await submitInvoiceToMra({
+          db,
+          env,
+          tenantId: ctx.tenantId,
+          terminalUid: terminal.id,
+          payload: built.payload,
+          credentials: freshCreds,
+          timeoutMs: env.timeoutMs,
+        });
+      }
+    }
+  }
 
   if (outcome.shouldDownloadLatestConfig) {
     await refreshConfiguration(db, env, terminal, credentials.jwtToken);
@@ -613,34 +641,61 @@ export async function activateTerminalCore(
   }
 
   // Step 2 — confirm activation with the x-signature over the TAC.
-  const xSignature = await hmacSha512Base64(secretKey, input.tac);
-  const confirmation = await callMra<boolean>({
-    env,
-    path: MRA_PATHS.terminalActivatedConfirmation,
-    payload: { terminalId: activated.terminalId },
-    auth: { jwtToken, xSignature },
-    timeoutMs: 20_000,
-  });
+  // MRA dev is flaky on this endpoint, so we retry up to 3 times with backoff.
+  let confirmationOk = false;
+  let lastConfirmationError = "";
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const xSignature = await hmacSha512Base64(secretKey, input.tac);
+    const confirmation = await callMra<boolean>({
+      env,
+      path: MRA_PATHS.terminalActivatedConfirmation,
+      payload: { terminalId: activated.terminalId },
+      auth: { jwtToken, xSignature },
+      timeoutMs: 20_000,
+    });
 
-  await logMraCall(db, {
-    tenantId: ctx.tenantId,
-    terminalUid,
-    endpoint: MRA_PATHS.terminalActivatedConfirmation,
-    statusCode: confirmation.httpStatus,
-    durationMs: confirmation.durationMs,
-    ok: confirmation.ok,
-    request: canonicalJson({ terminalId: activated.terminalId }),
-    response: confirmation.raw || (confirmation.error ?? ""),
-  });
+    await logMraCall(db, {
+      tenantId: ctx.tenantId,
+      terminalUid,
+      endpoint: MRA_PATHS.terminalActivatedConfirmation,
+      statusCode: confirmation.httpStatus,
+      durationMs: confirmation.durationMs,
+      ok: confirmation.ok,
+      request: JSON.stringify({ terminalId: activated.terminalId, attempt }),
+      response: confirmation.raw || (confirmation.error ?? ""),
+    });
 
-  if (!confirmation.ok) {
+    if (confirmation.ok) {
+      confirmationOk = true;
+      break;
+    }
+
+    lastConfirmationError = summarizeErrors(confirmation);
+    if (attempt < 3) {
+      await new Promise((r) => setTimeout(r, 1000 * attempt));
+    }
+  }
+
+  if (!confirmationOk) {
+    // Terminal is activated and credentials are stored, but confirmation failed.
+    // Keep terminal as "pending" — the user can retry confirmation via the dashboard.
+    // DO NOT return an error that loses the credentials.
     await db
       .from("terminals")
-      .update({ status: "pending", last_error: summarizeErrors(confirmation) })
+      .update({ status: "pending", last_error: lastConfirmationError })
       .eq("id", terminalUid);
-    return errorResponse(502, "confirmation_failed", summarizeErrors(confirmation), {
-      mra_status_code: confirmation.statusCode,
-      mra_errors: confirmation.errors,
+
+    return json({
+      activated: true,
+      confirmed: false,
+      terminal_uid: terminalUid,
+      terminal_id: input.terminal_id,
+      mra_terminal_id: activated.terminalId,
+      taxpayer_id: activated.taxpayerId ?? null,
+      terminal_position: activated.terminalPosition ?? 1,
+      store_id: input.store_id,
+      mode: env.mode,
+      warning: "Activation succeeded but confirmation failed. Retry via the dashboard or wait for MRA.",
     });
   }
 
@@ -1236,17 +1291,73 @@ export async function handleTerminalActivatedConfirmation(request: Request): Pro
   const credentials = await loadCredentials(db, env, terminal.id);
   if (!credentials) return errorResponse(409, "terminal_inactive", "Terminal credentials missing");
   const typedRaw = raw as Record<string, unknown>;
-  const signature = await hmacSha512Base64(env.masterKey, (typedRaw["tac"] as string) ?? "");
-  const result = await callMra({ env, path: MRA_PATHS.terminalActivatedConfirmation, payload: typedRaw, auth: { jwtToken: credentials.jwtToken, xSignature: signature } });
+
+  // x-signature = HMAC-SHA512(TAC, terminal secretKey) — NOT the master key.
+  const tac = (typedRaw["tac"] as string) ?? (terminal as Record<string, unknown>)["activation_code"] as string ?? "";
+  const signature = await hmacSha512Base64(credentials.secretKey, tac);
+  const result = await callMra({ env, path: MRA_PATHS.terminalActivatedConfirmation, payload: { terminalId: (terminal as Record<string, unknown>)["mra_terminal_ref"] ?? typedRaw["terminalId"] }, auth: { jwtToken: credentials.jwtToken, xSignature: signature } });
+
+  await logMraCall(db, {
+    tenantId: (terminal as Record<string, unknown>)["tenant_id"] as string,
+    terminalUid: terminal.id,
+    endpoint: MRA_PATHS.terminalActivatedConfirmation,
+    statusCode: result.httpStatus,
+    durationMs: result.durationMs,
+    ok: result.ok,
+    request: JSON.stringify({ terminalId: (terminal as Record<string, unknown>)["mra_terminal_ref"] }),
+    response: result.raw || (result.error ?? ""),
+  });
+
   if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
-  return json(result.data ?? { status: "confirmed" });
+
+  await db
+    .from("terminals")
+    .update({ status: "active", confirmed_at: new Date().toISOString(), is_blocked: false, blocking_message: null, last_error: null })
+    .eq("id", terminal.id);
+
+  return json({ status: "confirmed", terminal_uid: terminal.id });
 }
 
 export async function handleRequestNewTerminalToken(request: Request): Promise<Response> {
   const auth = await authenticateTenant(await getDb(), request);
   if (!auth.ok) return auth.response;
   const r = await resolveTerminal(request, auth.context.tenantId);
-  if ("error" in r) return r.error;
+  if ("error" in r) {
+    // If terminal is pending (activation succeeded but confirmation failed),
+    // still allow token refresh so credentials can be renewed.
+    const terminalKey = request.headers.get("x-terminal-id");
+    if (!terminalKey) return r.error;
+    const db = await getDb();
+    const { data: terminal } = await db.from("terminals").select(TERMINAL_COLUMNS).eq("terminal_id", terminalKey).maybeSingle();
+    if (!terminal) return r.error;
+    if (terminal.status !== "pending") return r.error;
+    const env = readEnv();
+    const credentials = await loadCredentials(db, env, terminal.id);
+    if (!credentials) return r.error;
+    // Retry with the pending terminal
+    const retryResult = await callMra<{ terminalCredentials?: { jwtToken?: string; secretKey?: string } }>({
+      env,
+      path: MRA_PATHS.requestNewTerminalToken,
+      payload: {},
+      auth: { jwtToken: credentials.jwtToken },
+    });
+    if (!retryResult.ok) return errorResponse(502, "mra_rejection", summarizeErrors(retryResult), retryResult.errors);
+    const newJwt2 = retryResult.data?.terminalCredentials?.jwtToken;
+    const newSecret2 = retryResult.data?.terminalCredentials?.secretKey;
+    if (newJwt2 && newSecret2) {
+      await db.from("terminal_secrets").upsert(
+        {
+          terminal_uid: terminal.id,
+          tenant_id: auth.context.tenantId,
+          secret_key_enc: await sealSecret(newSecret2, env.masterKey, env.isProduction),
+          session_token_enc: await sealSecret(newJwt2, env.masterKey, env.isProduction),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "terminal_uid" },
+      );
+    }
+    return json(retryResult.data ?? {});
+  }
   const result = await callMra<{ terminalCredentials?: { jwtToken?: string; secretKey?: string } }>({
     env: r.env,
     path: MRA_PATHS.requestNewTerminalToken,
