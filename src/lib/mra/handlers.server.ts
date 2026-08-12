@@ -1454,7 +1454,7 @@ export async function handleGetUnitsOfMeasure(request: Request): Promise<Respons
   if (!auth.ok) return auth.response;
   const r = await resolveTerminal(request, auth.context.tenantId);
   if ("error" in r) return r.error;
-  const result = await callMra({ env: r.env, path: MRA_PATHS.getUnitsOfMeasure, payload: {}, auth: { jwtToken: r.credentials.jwtToken } });
+  const result = await callMra({ env: r.env, path: MRA_PATHS.getUnitsOfMeasure, payload: {}, method: "GET", auth: { jwtToken: r.credentials.jwtToken } });
   if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
   return json(result.data ?? { units: [] });
 }
