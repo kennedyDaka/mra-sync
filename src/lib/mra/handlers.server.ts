@@ -27,7 +27,7 @@ import {
 const IDEMPOTENCY_WINDOW_HOURS = 48;
 
 export const TERMINAL_COLUMNS =
-  "id, tenant_id, store_id, terminal_id, mra_terminal_ref, status, config, taxpayer_id, terminal_position, global_config_version, taxpayer_config_version, terminal_config_version, is_blocked, offline_max_age_hours, offline_max_amount, offline_accumulated, last_config_sync_at";
+  "id, tenant_id, store_id, terminal_id, mra_terminal_ref, status, config, taxpayer_id, terminal_position, global_config_version, taxpayer_config_version, terminal_config_version, is_blocked, offline_max_age_hours, offline_max_amount, offline_accumulated, last_config_sync_at, activation_code";
 
 async function getDb(): Promise<SupabaseClient> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

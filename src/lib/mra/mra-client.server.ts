@@ -1,10 +1,15 @@
 /**
  * HTTP client for the MRA EIS API (https://eis-api.mra.mw).
  *
- * Header rules per the Developers Guide, section 4.1.1:
+ * Header rules per the Developers Guide, section 4.1.1, and the official
+ * open-source SDK (github.com/joelfickson/mra-sdk):
  *  - x-access-key : Vendor Access Key, required only for terminal activation in production.
- *  - x-signature  : Base64 HMAC-SHA512 of the TAC, required only for activation confirmation.
- *  - Authorization: Bearer jwtToken from the activation response, for every other endpoint.
+ *  - x-signature  : Base64 HMAC-SHA512(TAC, secretKey), required only for activation confirmation.
+ *  - Authorization: "Bearer <jwtToken>" for every other endpoint.
+ *
+ * NOTE: The MRA docs curl examples show raw JWT without Bearer prefix, but
+ * section 4.1.1.3 explicitly says "Bearer Authorization jwtToken" and the
+ * official SDK confirms Bearer prefix is required. Without it, MRA returns 401.
  *
  * Every response follows the envelope { statusCode, remark, data, errors }.
  * statusCode === 1 means success; anything < -1 is a business failure.
@@ -100,12 +105,17 @@ export async function callMra<T = unknown>(options: {
   const started = Date.now();
 
   const headers: Record<string, string> = {
-    accept: "text/plain",
+    // The SDK uses application/json for all endpoints. MRA docs show text/plain
+    // for most endpoints but application/json for get-latest-configs.
+    // application/json works for all — confirmed by the official SDK.
+    accept: "application/json",
     "content-type": "application/json",
   };
   if (auth?.accessKey) headers["x-access-key"] = auth.accessKey;
   if (auth?.xSignature) headers["x-signature"] = auth.xSignature;
-  if (auth?.jwtToken) headers["authorization"] = auth.jwtToken;
+  // MRA docs curl examples show raw JWT, but the official SDK and section 4.1.1.3
+  // confirm Bearer prefix is required: "Bearer Authorization jwtToken".
+  if (auth?.jwtToken) headers["authorization"] = `Bearer ${auth.jwtToken}`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? env.timeoutMs);
