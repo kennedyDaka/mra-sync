@@ -64,7 +64,7 @@ export function handleCors(request: Request, response: Response): Response {
   }
 
   r = cloneWithHeader(r, "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  r = cloneWithHeader(r, "Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID");
+  r = cloneWithHeader(r, "Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID, X-Terminal-ID, Idempotency-Key");
   r = cloneWithHeader(r, "Access-Control-Max-Age", "86400");
 
   return r;
@@ -78,7 +78,7 @@ export function handlePreflight(request: Request): Response | null {
     status: 204,
     headers: {
       "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Request-ID",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Request-ID, X-Terminal-ID, Idempotency-Key",
       "Access-Control-Max-Age": "86400",
     },
   });

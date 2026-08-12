@@ -140,10 +140,13 @@ const triggerSync = createServerFn({ method: "POST" })
 export const Route = createFileRoute("/api/ops/v1/connectors")({
   server: {
     handlers: {
-      GET: async () => {
-        const result = await listConnectors();
-        return new Response(JSON.stringify(result), {
-          headers: { "content-type": "application/json" },
+      GET: async ({ request }) => {
+        const { withSecurity } = await import("@/lib/mra/security.server");
+        return withSecurity(request, async () => {
+          const result = await listConnectors();
+          return new Response(JSON.stringify(result), {
+            headers: { "content-type": "application/json" },
+          });
         });
       },
     },

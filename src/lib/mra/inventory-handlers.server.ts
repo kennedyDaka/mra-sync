@@ -8,7 +8,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { readEnv } from "./env.server";
 import { authenticateTenant, checkRateLimit, errorResponse, json } from "./http.server";
 import { callMra, MRA_PATHS, summarizeErrors } from "./mra-client.server";
-import { logMraCall, loadCredentials, type TerminalRow } from "./sales.server";
+import { formatMraDateTime } from "./crypto.server";
+import { logMraCall, loadCredentials, resolveSiteId, type TerminalRow } from "./sales.server";
 import { TERMINAL_COLUMNS } from "./handlers.server";
 
 /* ------------------------------------------------------------------ helpers */
@@ -190,7 +191,7 @@ export async function handleStockAdjustment(request: Request): Promise<Response>
     quantity: parsed.data.quantity,
     adjustmentReason: parsed.data.adjustment_reason,
     adjustmentType: parsed.data.adjustment_type,
-    siteId: parsed.data.site_id ?? terminal.store_id,
+    siteId: parsed.data.site_id ?? resolveSiteId(terminal.config ?? {}, terminal.store_id),
     taxpayerRemarks: parsed.data.taxpayer_remarks ?? null,
   };
 
@@ -294,7 +295,7 @@ export async function handleTransferInventory(request: Request): Promise<Respons
 
   const payload = {
     fromWarehouseToSite: parsed.data.from_warehouse_to_site,
-    fromSiteId: parsed.data.from_site_id ?? terminal.store_id,
+    fromSiteId: parsed.data.from_site_id ?? resolveSiteId(terminal.config ?? {}, terminal.store_id),
     toSiteId: parsed.data.to_site_id ?? "",
     items: parsed.data.items.map((i) => ({
       barcode: i.barcode ?? "",
@@ -642,9 +643,6 @@ export async function handleCreditDebitNote(request: Request): Promise<Response>
     .maybeSingle();
 
   const config = terminal.config ?? {};
-  const global = (config["globalConfiguration"] ?? {}) as Record<string, unknown>;
-  const taxpayer = (config["taxpayerConfiguration"] ?? {}) as Record<string, unknown>;
-  const terminalCfg = (config["terminalConfiguration"] ?? {}) as Record<string, unknown>;
 
   const totalLineAmount = parsed.data.line_items.reduce((sum, i) => sum + i.total, 0);
   const totalLineVat = parsed.data.line_items.reduce((sum, i) => sum + i.total_vat, 0);
@@ -652,12 +650,12 @@ export async function handleCreditDebitNote(request: Request): Promise<Response>
   const payload = {
     invoiceHeader: {
       invoiceNumber: parsed.data.original_invoice_number,
-      invoiceDateTime: new Date().toISOString(),
-      sellerTIN: tenantRow?.["taxpayer_tin"] ?? (taxpayer["tin"] as string) ?? "",
-      siteId: terminal.store_id,
-      globalConfigVersion: Number(global["versionNo"] ?? 0),
-      taxpayerConfigVersion: Number(taxpayer["versionNo"] ?? 0),
-      terminalConfigVersion: Number(terminalCfg["versionNo"] ?? 0),
+      invoiceDateTime: formatMraDateTime(new Date()),
+      sellerTIN: tenantRow?.["taxpayer_tin"] ?? "",
+      siteId: resolveSiteId(config, terminal.store_id),
+      globalConfigVersion: terminal.global_config_version,
+      taxpayerConfigVersion: terminal.taxpayer_config_version,
+      terminalConfigVersion: terminal.terminal_config_version,
       isExport: false,
       isReliefSupply: false,
       paymentMethod: null,
