@@ -11,6 +11,7 @@ import { canonicalJson, hmacSha512Base64, mintApiToken, sealSecret } from "./cry
 import { readEnv, type MraEnv } from "./env.server";
 import { authenticateTenant, checkRateLimit, errorResponse, json } from "./http.server";
 import { callMra, MRA_PATHS, summarizeErrors } from "./mra-client.server";
+import { generateMac } from "./platform.server";
 import {
   buildOfflineValidation,
   buildSalesInvoice,
@@ -539,8 +540,9 @@ export async function activateTerminalCore(
         // MRA requires macAddress (despite Swagger listing it as nullable).
         // POS-initiated: caller sends the real MAC of the POS machine.
         // Self-service: admin.functions.ts generates a deterministic MAC.
-        // If nothing is provided, use a placeholder — but MRA will reject it.
-        macAddress: input.platform?.mac_address ?? "00-00-00-00-00-00",
+        // If nothing is provided, generate one from store+terminal identity —
+        // same as the self-service path — so MRA accepts it.
+        macAddress: input.platform?.mac_address ?? generateMac(input.store_id, input.terminal_id),
       },
       pos: {
         productID: input.pos?.product_id ?? env.posProductId,
@@ -1295,9 +1297,12 @@ export async function handleTerminalActivatedConfirmation(request: Request): Pro
   try { raw = await request.json(); } catch { return errorResponse(400, "invalid_json", "Request body is not valid JSON"); }
   const env = readEnv();
   const db = await getDb();
+  const auth = await authenticateTenant(db, request);
+  if (!auth.ok) return auth.response;
+  const ctx = auth.context;
   const terminalKey = request.headers.get("x-terminal-id");
   if (!terminalKey) return errorResponse(400, "missing_terminal", "X-Terminal-ID header is required");
-  const { data: terminal } = await db.from("terminals").select(TERMINAL_COLUMNS).eq("terminal_id", terminalKey).maybeSingle();
+  const { data: terminal } = await db.from("terminals").select(TERMINAL_COLUMNS).eq("tenant_id", ctx.tenantId).eq("terminal_id", terminalKey).maybeSingle();
   if (!terminal) return errorResponse(404, "unknown_terminal", "Terminal not found");
   const credentials = await loadCredentials(db, env, terminal.id);
   if (!credentials) return errorResponse(409, "terminal_inactive", "Terminal credentials missing");
@@ -1310,7 +1315,7 @@ export async function handleTerminalActivatedConfirmation(request: Request): Pro
   const result = await callMra({ env, path: MRA_PATHS.terminalActivatedConfirmation, payload: { terminalId: (terminal as Record<string, unknown>)["mra_terminal_ref"] ?? typedRaw["terminalId"] }, auth: { xSignature: signature, jwtToken: credentials.jwtToken } });
 
   await logMraCall(db, {
-    tenantId: (terminal as Record<string, unknown>)["tenant_id"] as string,
+    tenantId: ctx.tenantId,
     terminalUid: terminal.id,
     endpoint: MRA_PATHS.terminalActivatedConfirmation,
     statusCode: result.httpStatus,
