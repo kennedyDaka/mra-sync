@@ -1308,31 +1308,47 @@ export async function handleTerminalActivatedConfirmation(request: Request): Pro
   if (!credentials) return errorResponse(409, "terminal_inactive", "Terminal credentials missing");
   const typedRaw = raw as Record<string, unknown>;
 
-  // x-signature = HMAC-SHA512(TAC, terminal secretKey) — NOT the master key.
   const tac = (typedRaw["tac"] as string) ?? (terminal as Record<string, unknown>)["activation_code"] as string ?? "";
-  const signature = await hmacSha512Base64(credentials.secretKey, tac);
-  // MRA returns 401 without Authorization header on confirmation (docs omit it but it IS required).
-  const result = await callMra({ env, path: MRA_PATHS.terminalActivatedConfirmation, payload: { terminalId: (terminal as Record<string, unknown>)["mra_terminal_ref"] ?? typedRaw["terminalId"] }, auth: { xSignature: signature, jwtToken: credentials.jwtToken } });
+  const mraTerminalRef = (terminal as Record<string, unknown>)["mra_terminal_ref"] ?? typedRaw["terminalId"];
 
-  await logMraCall(db, {
-    tenantId: ctx.tenantId,
-    terminalUid: terminal.id,
-    endpoint: MRA_PATHS.terminalActivatedConfirmation,
-    statusCode: result.httpStatus,
-    durationMs: result.durationMs,
-    ok: result.ok,
-    request: JSON.stringify({ terminalId: (terminal as Record<string, unknown>)["mra_terminal_ref"] }),
-    response: result.raw || (result.error ?? ""),
-  });
+  // Retry up to 3 times with backoff — same as activateTerminalCore.
+  let lastError = "";
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const signature = await hmacSha512Base64(credentials.secretKey, tac);
+    const result = await callMra({
+      env,
+      path: MRA_PATHS.terminalActivatedConfirmation,
+      payload: { terminalId: mraTerminalRef },
+      auth: { xSignature: signature, jwtToken: credentials.jwtToken },
+      timeoutMs: 20_000,
+    });
 
-  if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
+    await logMraCall(db, {
+      tenantId: ctx.tenantId,
+      terminalUid: terminal.id,
+      endpoint: MRA_PATHS.terminalActivatedConfirmation,
+      statusCode: result.httpStatus,
+      durationMs: result.durationMs,
+      ok: result.ok,
+      request: JSON.stringify({ terminalId: mraTerminalRef, attempt }),
+      response: result.raw || (result.error ?? ""),
+    });
 
-  await db
-    .from("terminals")
-    .update({ status: "active", confirmed_at: new Date().toISOString(), is_blocked: false, blocking_message: null, last_error: null })
-    .eq("id", terminal.id);
+    if (result.ok) {
+      await db
+        .from("terminals")
+        .update({ status: "active", confirmed_at: new Date().toISOString(), is_blocked: false, blocking_message: null, last_error: null })
+        .eq("id", terminal.id);
+      return json({ status: "confirmed", terminal_uid: terminal.id });
+    }
 
-  return json({ status: "confirmed", terminal_uid: terminal.id });
+    lastError = summarizeErrors(result);
+    if (attempt < 3) {
+      await new Promise((r) => setTimeout(r, 1000 * attempt));
+    }
+  }
+
+  return errorResponse(502, "mra_rejection", lastError);
 }
 
 export async function handleRequestNewTerminalToken(request: Request): Promise<Response> {
