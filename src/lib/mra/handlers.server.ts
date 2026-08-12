@@ -655,7 +655,8 @@ export async function activateTerminalCore(
       env,
       path: MRA_PATHS.terminalActivatedConfirmation,
       payload: { terminalId: activated.terminalId },
-      auth: { xSignature },
+      // MRA returns 401 without Authorization header (docs omit it but it IS required).
+      auth: { xSignature, jwtToken },
       timeoutMs: 20_000,
     });
 
@@ -1305,7 +1306,8 @@ export async function handleTerminalActivatedConfirmation(request: Request): Pro
   // x-signature = HMAC-SHA512(TAC, terminal secretKey) — NOT the master key.
   const tac = (typedRaw["tac"] as string) ?? (terminal as Record<string, unknown>)["activation_code"] as string ?? "";
   const signature = await hmacSha512Base64(credentials.secretKey, tac);
-  const result = await callMra({ env, path: MRA_PATHS.terminalActivatedConfirmation, payload: { terminalId: (terminal as Record<string, unknown>)["mra_terminal_ref"] ?? typedRaw["terminalId"] }, auth: { xSignature: signature } });
+  // MRA returns 401 without Authorization header on confirmation (docs omit it but it IS required).
+  const result = await callMra({ env, path: MRA_PATHS.terminalActivatedConfirmation, payload: { terminalId: (terminal as Record<string, unknown>)["mra_terminal_ref"] ?? typedRaw["terminalId"] }, auth: { xSignature: signature, jwtToken: credentials.jwtToken } });
 
   await logMraCall(db, {
     tenantId: (terminal as Record<string, unknown>)["tenant_id"] as string,
