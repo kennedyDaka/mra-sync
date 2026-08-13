@@ -142,9 +142,9 @@ export const Route = createFileRoute("/api/ops/v1/connectors")({
     handlers: {
       GET: async ({ request }) => {
         const { withSecurity } = await import("@/lib/mra/security.server");
+        const { listConnectors: getList } = await import("@/lib/connectors/registry");
         return withSecurity(request, async () => {
-          const result = await listConnectors();
-          return new Response(JSON.stringify(result), {
+          return new Response(JSON.stringify({ connectors: getList() }), {
             headers: { "content-type": "application/json" },
           });
         });

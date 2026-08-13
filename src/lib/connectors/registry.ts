@@ -37,5 +37,11 @@ export function hasConnector(type: string): boolean {
   return registry.has(type);
 }
 
-// Eagerly import and register all built-in connectors
-import "./builtin-connectors";
+// Register built-in connectors eagerly
+import { OdooConnector } from "./odoo.connector";
+import { GenericRestConnector } from "./generic-rest.connector";
+import { GenericWebhookConnector } from "./generic-webhook.connector";
+
+registerConnector("odoo", () => new OdooConnector());
+registerConnector("generic-rest", () => new GenericRestConnector());
+registerConnector("generic-webhook", () => new GenericWebhookConnector());

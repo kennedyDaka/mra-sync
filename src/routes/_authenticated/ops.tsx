@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Metric, StatusPill } from "@/components/ops/primitives";
 import { StoresPanel } from "@/components/ops/stores-panel";
+import { ConnectorsPanel } from "@/components/ops/connectors-panel";
 import { supabase } from "@/integrations/supabase/client";
 import {
   createTenant,
@@ -281,6 +282,7 @@ function OpsConsole() {
             <TabsTrigger value="stores">Stores</TabsTrigger>
             <TabsTrigger value="terminals">Terminals</TabsTrigger>
             <TabsTrigger value="catalogue">Catalogue</TabsTrigger>
+            <TabsTrigger value="connectors">Connectors</TabsTrigger>
             <TabsTrigger value="logs">MRA logs</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
@@ -472,6 +474,16 @@ function OpsConsole() {
                 </tbody>
               </table>
             </div>
+          </TabsContent>
+
+          <TabsContent value="connectors" className="mt-4">
+            {activeId ? (
+              <ConnectorsPanel tenantId={activeId} />
+            ) : (
+              <div className="panel p-10 text-center text-muted-foreground">
+                Create a merchant in Settings first.
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="logs" className="mt-4">
