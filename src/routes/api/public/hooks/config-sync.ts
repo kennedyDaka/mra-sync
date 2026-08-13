@@ -17,8 +17,15 @@ export const Route = createFileRoute("/api/public/hooks/config-sync")({
               headers: { "content-type": "application/json" },
             });
           }
-          const { handleConfigSync } = await import("@/lib/mra/handlers.server");
-          return handleConfigSync();
+          try {
+            const { handleConfigSync } = await import("@/lib/mra/handlers.server");
+            return await handleConfigSync();
+          } catch (err: any) {
+            return new Response(JSON.stringify({ error: err.message ?? "internal error" }), {
+              status: 500,
+              headers: { "content-type": "application/json" },
+            });
+          }
         });
       },
     },

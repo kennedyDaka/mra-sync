@@ -945,6 +945,7 @@ export async function handleQueueWorker(): Promise<Response> {
   let dead = 0;
 
   for (const job of claimed) {
+    try {
     const { data: invoice } = await db
       .from("invoices")
       .select("id, tenant_id, terminal_uid, mra_payload, mra_invoice_number, grand_total")
@@ -1083,6 +1084,14 @@ export async function handleQueueWorker(): Promise<Response> {
       .update({ attempts: job.attempts, last_error: outcome.error })
       .eq("id", invoice["id"]);
     requeued += 1;
+    } catch (err: any) {
+      console.error(`[sync-worker] job ${job.id} failed:`, err.message);
+      await db
+        .from("sync_queue")
+        .update({ status: "dead", last_error: err.message ?? "processing error" })
+        .eq("id", job.id);
+      dead += 1;
+    }
   }
 
   return json({ claimed: claimed.length, submitted, requeued, dead });
@@ -1176,20 +1185,25 @@ export async function handleConfigSync(): Promise<Response> {
   let failed = 0;
 
   for (const terminal of terminals ?? []) {
-    const credentials = await loadCredentials(db, env, terminal["id"] as string);
-    if (!credentials) {
-      failed += 1;
-      continue;
-    }
+    try {
+      const credentials = await loadCredentials(db, env, terminal["id"] as string);
+      if (!credentials) {
+        failed += 1;
+        continue;
+      }
 
-    const ok = await refreshConfiguration(
-      db,
-      env,
-      { id: terminal["id"] as string, tenant_id: terminal["tenant_id"] as string },
-      credentials.jwtToken,
-    );
-    if (ok) updated += 1;
-    else failed += 1;
+      const ok = await refreshConfiguration(
+        db,
+        env,
+        { id: terminal["id"] as string, tenant_id: terminal["tenant_id"] as string },
+        credentials.jwtToken,
+      );
+      if (ok) updated += 1;
+      else failed += 1;
+    } catch (err: any) {
+      console.error(`[config-sync] terminal ${terminal["terminal_id"]} failed:`, err.message);
+      failed += 1;
+    }
   }
 
   return json({ terminals: (terminals ?? []).length, updated, failed });

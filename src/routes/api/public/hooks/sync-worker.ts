@@ -17,8 +17,15 @@ export const Route = createFileRoute("/api/public/hooks/sync-worker")({
               headers: { "content-type": "application/json" },
             });
           }
-          const { handleQueueWorker } = await import("@/lib/mra/handlers.server");
-          return handleQueueWorker();
+          try {
+            const { handleQueueWorker } = await import("@/lib/mra/handlers.server");
+            return await handleQueueWorker();
+          } catch (err: any) {
+            return new Response(JSON.stringify({ error: err.message ?? "internal error" }), {
+              status: 500,
+              headers: { "content-type": "application/json" },
+            });
+          }
         });
       },
     },

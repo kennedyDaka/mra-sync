@@ -18,7 +18,12 @@ export interface MraEnv {
   isProduction: boolean;
 }
 
+let _validated = false;
+let _cached: MraEnv | null = null;
+
 export function readEnv(): MraEnv {
+  if (_validated && _cached) return _cached;
+
   const mode = (process.env["APP_MODE"] ?? "development") as AppMode;
   const isProduction = mode === "production";
 
@@ -36,29 +41,40 @@ export function readEnv(): MraEnv {
 
   const timeoutMs = Number(process.env["MRA_TIMEOUT_MS"] ?? "1500");
   const masterKey = process.env["MRA_MASTER_KEY"] ?? "";
+  const cronSecret = process.env["CRON_SECRET"] ?? "";
 
-  // Production must have a real encryption key — never allow empty
-  if (isProduction && !masterKey) {
+  // ---- CRITICAL: Fail fast on invalid configuration ----
+
+  // MRA_MASTER_KEY is required in ALL modes — credentials are encrypted with it.
+  // Without it, terminal activation succeeds but sales fail with GCM decryption errors.
+  if (!masterKey || masterKey.length < 32) {
     throw new Error(
-      "MRA_MASTER_KEY is required in production mode. " +
-        "Set it to a secure random string (min 32 chars) before deploying.",
+      `[ENV] MRA_MASTER_KEY is required (min 32 chars). ` +
+        `Current length: ${masterKey.length}. ` +
+        `Set it in .env and Vercel dashboard before deploying.`,
     );
   }
 
-  // Production must have Supabase credentials
+  // Production-specific checks
   if (isProduction) {
     const required = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_JWT_SECRET"] as const;
     for (const key of required) {
       if (!process.env[key]) {
-        throw new Error(`Missing required production env var: ${key}`);
+        throw new Error(`[ENV] Missing required production env var: ${key}`);
       }
     }
-    if (masterKey.length < 32) {
-      throw new Error("MRA_MASTER_KEY must be at least 32 characters in production");
+    if (!cronSecret) {
+      throw new Error("[ENV] CRON_SECRET is required in production for hook protection");
     }
   }
 
-  return {
+  // Warn about missing optional vars (non-fatal)
+  if (!cronSecret && !isProduction) {
+    console.warn("[ENV] CRON_SECRET not set — sync hooks are unprotected in development");
+  }
+
+  _validated = true;
+  _cached = {
     mode,
     baseUrl,
     validationBaseUrl,
@@ -69,4 +85,5 @@ export function readEnv(): MraEnv {
     posProductVersion: process.env["MRA_POS_PRODUCT_VERSION"] ?? "1.0.0",
     isProduction,
   };
+  return _cached;
 }
