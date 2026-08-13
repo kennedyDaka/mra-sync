@@ -27,6 +27,49 @@ import {
 
 const IDEMPOTENCY_WINDOW_HOURS = 48;
 
+/**
+ * Fire-and-forget: push a submitted invoice to the tenant's ERP connector.
+ * Runs asynchronously after MRA submission — does not block the sales response.
+ */
+async function pushInvoiceToErpAsync(
+  db: SupabaseClient,
+  tenantId: string,
+  input: { erp_invoice_number: string; line_items: Array<{ erp_sku: string; description?: string; quantity: number; unit_price: number; discount?: number; tax_rate_id?: string }>; payment_method?: string; customer_tin?: string; buyer_name?: string },
+): Promise<void> {
+  // Check if tenant has an active connector
+  const { data: connector } = await db
+    .from("tenant_connectors")
+    .select("connector_type, config_encrypted")
+    .eq("tenant_id", tenantId)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (!connector) return; // No connector configured — skip
+
+  const env = readEnv();
+  const { openSecret } = await import("./crypto.server");
+  const { getConnector } = await import("@/lib/connectors/registry");
+
+  const configStr = await openSecret(connector.config_encrypted as string, env.masterKey);
+  const config = JSON.parse(configStr) as Record<string, string | number | boolean>;
+  const erp = getConnector(connector.connector_type as string);
+  if (!erp?.submitInvoice) return;
+
+  const result = await erp.submitInvoice(config, {
+    erp_invoice_number: input.erp_invoice_number,
+    payment_method: input.payment_method,
+    customer_tin: input.customer_tin,
+    buyer_name: input.buyer_name,
+    line_items: input.line_items,
+  });
+
+  if (!result.ok) {
+    console.error(`[sales] ERP push failed for ${input.erp_invoice_number}: ${result.error}`);
+  } else {
+    console.log(`[sales] ERP push OK: ${input.erp_invoice_number} → ${connector.connector_type}`);
+  }
+}
+
 export const TERMINAL_COLUMNS =
   "id, tenant_id, store_id, terminal_id, mra_terminal_ref, status, config, taxpayer_id, terminal_position, global_config_version, taxpayer_config_version, terminal_config_version, is_blocked, offline_max_age_hours, offline_max_amount, offline_accumulated, last_config_sync_at, activation_code";
 
@@ -426,6 +469,12 @@ export async function handleSales(request: Request): Promise<Response> {
       .eq("id", invoice["id"])
       .select("*")
       .single();
+
+    // Fire-and-forget: push invoice to ERP if tenant has an active connector
+    pushInvoiceToErpAsync(db, ctx.tenantId, input).catch((err) =>
+      console.error("[sales] ERP push failed:", err.message),
+    );
+
     return json(receiptFor(updated ?? invoice), 200);
   }
 
