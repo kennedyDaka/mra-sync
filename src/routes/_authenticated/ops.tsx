@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Copy, LogOut, RefreshCcw, RotateCw } from "lucide-react";
+import { Copy, LogOut, RefreshCcw, RotateCw, ShieldAlert, Info, CheckCircle2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,10 @@ import {
   drainQueueNow,
   issueToken,
   retryInvoice,
+  refreshTerminalToken,
+  confirmActivationRetry,
+  getTerminalBlockingMessage,
+  mapProduct,
 } from "@/lib/mra/admin.functions";
 
 export const Route = createFileRoute("/_authenticated/ops")({
@@ -163,6 +167,10 @@ function OpsConsole() {
   const issueTokenFn = useServerFn(issueToken);
   const retryFn = useServerFn(retryInvoice);
   const drainFn = useServerFn(drainQueueNow);
+  const refreshTokenFn = useServerFn(refreshTerminalToken);
+  const confirmFn = useServerFn(confirmActivationRetry);
+  const blockingFn = useServerFn(getTerminalBlockingMessage);
+  const mapProductFn = useServerFn(mapProduct);
 
   const createMerchant = useMutation({
     mutationFn: (input: { name: string; slug: string; taxpayer_tin?: string }) =>
@@ -195,11 +203,52 @@ function OpsConsole() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const mapMutation = useMutation({
+    mutationFn: (v: { local_sku: string; mra_product_id: string; description?: string }) =>
+      mapProductFn({ data: { tenant_id: activeId!, ...v } }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["products", activeId] });
+      toast.success("SKU mapped to MRA product");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const drain = useMutation({
     mutationFn: () => drainFn(),
     onSuccess: (res) => {
       void qc.invalidateQueries();
       toast.success(`Worker run: ${res["submitted"] ?? 0} submitted, ${res["requeued"] ?? 0} requeued`);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const refreshTerminal = useMutation({
+    mutationFn: (terminalId: string) =>
+      refreshTokenFn({ data: { tenant_id: activeId!, terminal_id: terminalId } }),
+    onSuccess: (res) => {
+      void qc.invalidateQueries({ queryKey: ["terminals", activeId] });
+      toast.success(res.refreshed ? "Terminal token refreshed and re-sealed" : "Refresh returned no new credentials");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const confirmActivation = useMutation({
+    mutationFn: (terminalId: string) =>
+      confirmFn({ data: { tenant_id: activeId!, terminal_id: terminalId } }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["terminals", activeId] });
+      toast.success("Activation confirmed — terminal is active");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const blockingMessage = useMutation({
+    mutationFn: (terminalId: string) =>
+      blockingFn({ data: { tenant_id: activeId!, terminal_id: terminalId } }),
+    onSuccess: (res) => {
+      void qc.invalidateQueries({ queryKey: ["terminals", activeId] });
+      const msg = JSON.stringify(res.data).slice(0, 300);
+      toast.success(msg === "{}" ? "No blocking message from MRA" : `Blocking message: ${msg}`);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -407,6 +456,7 @@ function OpsConsole() {
                     <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3">Seq</th>
                     <th className="px-4 py-3">Config synced</th>
+                    <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -423,11 +473,44 @@ function OpsConsole() {
                           ? new Date(t.last_config_sync_at as string).toLocaleString()
                           : "never"}
                       </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          {t.status !== "active" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              title="Retry MRA activation confirmation"
+                              disabled={confirmActivation.isPending}
+                              onClick={() => confirmActivation.mutate(t.terminal_id)}
+                            >
+                              <CheckCircle2 className="size-3.5" /> Confirm
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            title="Request a fresh JWT + secret from MRA"
+                            disabled={refreshTerminal.isPending}
+                            onClick={() => refreshTerminal.mutate(t.terminal_id)}
+                          >
+                            <RotateCw className="size-3.5" /> Refresh token
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            title="Fetch the MRA blocking message for this terminal"
+                            disabled={blockingMessage.isPending}
+                            onClick={() => blockingMessage.mutate(t.terminal_id)}
+                          >
+                            <ShieldAlert className="size-3.5" />
+                          </Button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                   {(terminals.data ?? []).length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
+                      <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
                         No terminals activated yet.
                       </td>
                     </tr>
@@ -438,7 +521,12 @@ function OpsConsole() {
             <ActivationHint />
           </TabsContent>
 
-          <TabsContent value="catalogue" className="mt-4">
+          <TabsContent value="catalogue" className="mt-4 space-y-3">
+            <MapSkuForm
+              tenantId={activeId}
+              busy={mapMutation.isPending}
+              onMap={(v) => mapMutation.mutate(v)}
+            />
             <div className="panel overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="mono-tag text-muted-foreground">
@@ -551,6 +639,56 @@ function OpsConsole() {
 
 function KeyIcon() {
   return <RotateCw className="size-4" />;
+}
+
+function MapSkuForm({
+  tenantId,
+  busy,
+  onMap,
+}: {
+  tenantId: string | null;
+  busy: boolean;
+  onMap: (v: { local_sku: string; mra_product_id: string; description?: string }) => void;
+}) {
+  const [sku, setSku] = useState("");
+  const [mraId, setMraId] = useState("");
+  const [description, setDescription] = useState("");
+
+  if (!tenantId) return null;
+
+  return (
+    <form
+      className="panel flex flex-wrap items-end gap-3 p-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!sku.trim() || !mraId.trim()) return;
+        onMap({
+          local_sku: sku.trim(),
+          mra_product_id: mraId.trim(),
+          ...(description.trim() ? { description: description.trim() } : {}),
+        });
+        setSku("");
+        setMraId("");
+        setDescription("");
+      }}
+    >
+      <div className="space-y-1">
+        <Label htmlFor="map-sku">Local SKU</Label>
+        <Input id="map-sku" required value={sku} onChange={(e) => setSku(e.target.value)} placeholder="SKU-001" />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="map-mra">MRA product ID</Label>
+        <Input id="map-mra" required value={mraId} onChange={(e) => setMraId(e.target.value)} placeholder="87025" />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="map-desc">Description (optional)</Label>
+        <Input id="map-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Product name" />
+      </div>
+      <Button type="submit" size="sm" disabled={busy || !sku.trim() || !mraId.trim()}>
+        <Info className="size-4" /> Map SKU
+      </Button>
+    </form>
+  );
 }
 
 function ActivationHint() {

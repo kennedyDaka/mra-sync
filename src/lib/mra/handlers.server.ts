@@ -34,39 +34,72 @@ const IDEMPOTENCY_WINDOW_HOURS = 48;
 async function pushInvoiceToErpAsync(
   db: SupabaseClient,
   tenantId: string,
-  input: { erp_invoice_number: string; line_items: Array<{ erp_sku: string; description?: string; quantity: number; unit_price: number; discount?: number; tax_rate_id?: string }>; payment_method?: string; customer_tin?: string; buyer_name?: string },
+  input: {
+    erp_invoice_number: string;
+    line_items: Array<{
+      erp_sku: string;
+      description?: string | undefined;
+      quantity: number;
+      unit_price: number;
+      discount?: number | undefined;
+      tax_rate_id?: string | undefined;
+    }>;
+    payment_method?: string | undefined;
+    customer_tin?: string | undefined;
+    buyer_name?: string | undefined;
+  },
 ): Promise<void> {
   // Check if tenant has an active connector
-  const { data: connector } = await db
+  const { data: connectors } = await db
     .from("tenant_connectors")
     .select("connector_type, config_encrypted")
     .eq("tenant_id", tenantId)
-    .eq("is_active", true)
-    .maybeSingle();
+    .eq("is_active", true);
 
-  if (!connector) return; // No connector configured — skip
+  if (!connectors || connectors.length === 0) return; // No connector configured — skip
 
   const env = readEnv();
   const { openSecret } = await import("./crypto.server");
   const { getConnector } = await import("@/lib/connectors/registry");
 
-  const configStr = await openSecret(connector.config_encrypted as string, env.masterKey);
-  const config = JSON.parse(configStr) as Record<string, string | number | boolean>;
-  const erp = getConnector(connector.connector_type as string);
-  if (!erp?.submitInvoice) return;
+  // Tenants may run several connectors at once (e.g. a POS connector for
+  // ingest + an ERP connector for push). Route the invoice to the first
+  // connector that actually supports invoice submission, preferring
+  // dedicated ERP connectors over webhook passthrough so routing is
+  // deterministic regardless of row order.
+  const ERP_PRIORITY = ["odoo", "erpnext", "sap-b1", "tally", "generic-rest", "kiboerp", "cliqpos", "generic-webhook"];
+  const ordered = [...connectors].sort(
+    (a, b) =>
+      (ERP_PRIORITY.indexOf(a.connector_type as string) + 1 || ERP_PRIORITY.length + 1) -
+      (ERP_PRIORITY.indexOf(b.connector_type as string) + 1 || ERP_PRIORITY.length + 1),
+  );
+  for (const connector of ordered) {
+    const configStr = await openSecret(connector.config_encrypted as string, env.masterKey);
+    const config = JSON.parse(configStr) as Record<string, string | number | boolean>;
+    const erp = getConnector(connector.connector_type as string);
+    if (!erp?.submitInvoice) continue;
 
-  const result = await erp.submitInvoice(config, {
-    erp_invoice_number: input.erp_invoice_number,
-    payment_method: input.payment_method,
-    customer_tin: input.customer_tin,
-    buyer_name: input.buyer_name,
-    line_items: input.line_items,
-  });
+    const result = await erp.submitInvoice(config, {
+      erp_invoice_number: input.erp_invoice_number,
+      ...(input.payment_method ? { payment_method: input.payment_method } : {}),
+      ...(input.customer_tin ? { customer_tin: input.customer_tin } : {}),
+      ...(input.buyer_name ? { buyer_name: input.buyer_name } : {}),
+      line_items: input.line_items.map((li) => ({
+        erp_sku: li.erp_sku,
+        quantity: li.quantity,
+        unit_price: li.unit_price,
+        ...(li.description ? { description: li.description } : {}),
+        ...(li.discount ? { discount: li.discount } : {}),
+        ...(li.tax_rate_id ? { tax_rate_id: li.tax_rate_id } : {}),
+      })),
+    });
 
-  if (!result.ok) {
-    console.error(`[sales] ERP push failed for ${input.erp_invoice_number}: ${result.error}`);
-  } else {
-    console.log(`[sales] ERP push OK: ${input.erp_invoice_number} → ${connector.connector_type}`);
+    if (!result.ok) {
+      console.error(`[sales] ERP push failed for ${input.erp_invoice_number} → ${connector.connector_type}: ${result.error}`);
+    } else {
+      console.log(`[sales] ERP push OK: ${input.erp_invoice_number} → ${connector.connector_type}`);
+    }
+    return;
   }
 }
 
@@ -180,13 +213,21 @@ async function captureBlockingMessage(
 
 /* ------------------------------------------------------------------ sales */
 
-export async function handleSales(request: Request): Promise<Response> {
+export async function handleSales(
+  request: Request,
+  preAuth?: { tenantId: string; rateLimitPerMin: number },
+): Promise<Response> {
   const env = readEnv();
   const db = await getDb();
 
-  const auth = await authenticateTenant(db, request);
-  if (!auth.ok) return auth.response;
-  const ctx = auth.context;
+  let ctx: { tenantId: string; tenantName: string; mode: string; rateLimitPerMin: number; tokenId: string };
+  if (preAuth) {
+    ctx = { tenantId: preAuth.tenantId, tenantName: "", mode: "", rateLimitPerMin: preAuth.rateLimitPerMin, tokenId: "" };
+  } else {
+    const auth = await authenticateTenant(db, request);
+    if (!auth.ok) return auth.response;
+    ctx = auth.context;
+  }
 
   if (!(await checkRateLimit(db, ctx.tenantId, ctx.rateLimitPerMin))) {
     return errorResponse(429, "rate_limited", "Too many requests for this tenant");
@@ -811,11 +852,19 @@ const inventorySchema = z.object({
     .max(2000),
 });
 
-export async function handleInventorySync(request: Request): Promise<Response> {
+export async function handleInventorySync(
+  request: Request,
+  preAuth?: { tenantId: string; rateLimitPerMin: number },
+): Promise<Response> {
   const db = await getDb();
-  const auth = await authenticateTenant(db, request);
-  if (!auth.ok) return auth.response;
-  const ctx = auth.context;
+  let ctx: { tenantId: string; tenantName: string; mode: string; rateLimitPerMin: number; tokenId: string };
+  if (preAuth) {
+    ctx = { tenantId: preAuth.tenantId, tenantName: "", mode: "", rateLimitPerMin: preAuth.rateLimitPerMin, tokenId: "" };
+  } else {
+    const auth = await authenticateTenant(db, request);
+    if (!auth.ok) return auth.response;
+    ctx = auth.context;
+  }
 
   if (!(await checkRateLimit(db, ctx.tenantId, ctx.rateLimitPerMin))) {
     return errorResponse(429, "rate_limited", "Too many requests for this tenant");
@@ -918,7 +967,7 @@ export async function handleProductPull(request: Request): Promise<Response> {
     env,
     path: MRA_PATHS.terminalSiteProducts,
     payload,
-    auth: { jwtToken: credentials.jwtToken },
+    auth: { jwtToken: credentials.jwtToken, secretKey: credentials.secretKey },
     timeoutMs: 20_000,
   });
 
@@ -1305,7 +1354,7 @@ export async function handlePing(request: Request): Promise<Response> {
   if (!auth.ok) return auth.response;
   const r = await resolveTerminal(request, auth.context.tenantId);
   if ("error" in r) return r.error;
-  const result = await callMra({ env: r.env, path: MRA_PATHS.ping, payload: null, auth: { jwtToken: r.credentials.jwtToken } });
+  const result = await callMra({ env: r.env, path: MRA_PATHS.ping, payload: null, auth: { jwtToken: r.credentials.jwtToken, secretKey: r.credentials.secretKey } });
   if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
   return json(result.data ?? { status: "pong" });
 }
@@ -1316,7 +1365,7 @@ export async function handleLastSubmittedOnline(request: Request): Promise<Respo
   const r = await resolveTerminal(request, auth.context.tenantId);
   if ("error" in r) return r.error;
   const body = await request.json().catch(() => ({}));
-  const result = await callMra({ env: r.env, path: MRA_PATHS.lastSubmittedOnline, payload: body, auth: { jwtToken: r.credentials.jwtToken } });
+  const result = await callMra({ env: r.env, path: MRA_PATHS.lastSubmittedOnline, payload: body, auth: { jwtToken: r.credentials.jwtToken, secretKey: r.credentials.secretKey } });
   if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
   return json(result.data ?? {});
 }
@@ -1327,7 +1376,7 @@ export async function handleLastSubmittedOffline(request: Request): Promise<Resp
   const r = await resolveTerminal(request, auth.context.tenantId);
   if ("error" in r) return r.error;
   const body = await request.json().catch(() => ({}));
-  const result = await callMra({ env: r.env, path: MRA_PATHS.lastSubmittedOffline, payload: body, auth: { jwtToken: r.credentials.jwtToken } });
+  const result = await callMra({ env: r.env, path: MRA_PATHS.lastSubmittedOffline, payload: body, auth: { jwtToken: r.credentials.jwtToken, secretKey: r.credentials.secretKey } });
   if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
   return json(result.data ?? {});
 }
@@ -1339,7 +1388,7 @@ export async function handleCancelReceipt(request: Request): Promise<Response> {
   if ("error" in r) return r.error;
   let raw: unknown;
   try { raw = await request.json(); } catch { return errorResponse(400, "invalid_json", "Request body is not valid JSON"); }
-  const result = await callMra({ env: r.env, path: MRA_PATHS.cancelReceipt, payload: raw, auth: { jwtToken: r.credentials.jwtToken } });
+  const result = await callMra({ env: r.env, path: MRA_PATHS.cancelReceipt, payload: raw, auth: { jwtToken: r.credentials.jwtToken, secretKey: r.credentials.secretKey } });
   await logMraCall(r.db, { tenantId: auth.context.tenantId, terminalUid: r.terminal.id, endpoint: MRA_PATHS.cancelReceipt, statusCode: result.httpStatus, durationMs: result.durationMs, ok: result.ok, request: JSON.stringify(raw), response: result.raw });
   if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
   return json(result.data ?? { status: "cancelled" });
@@ -1350,7 +1399,7 @@ export async function handleGetVoidReceipts(request: Request): Promise<Response>
   if (!auth.ok) return auth.response;
   const r = await resolveTerminal(request, auth.context.tenantId);
   if ("error" in r) return r.error;
-  const result = await callMra({ env: r.env, path: MRA_PATHS.getVoidReceipts, payload: {}, auth: { jwtToken: r.credentials.jwtToken } });
+  const result = await callMra({ env: r.env, path: MRA_PATHS.getVoidReceipts, payload: {}, auth: { jwtToken: r.credentials.jwtToken, secretKey: r.credentials.secretKey } });
   if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
   return json(result.data ?? { voids: [] });
 }
@@ -1435,22 +1484,35 @@ export async function handleRequestNewTerminalToken(request: Request): Promise<R
       env,
       path: MRA_PATHS.requestNewTerminalToken,
       payload: {},
-      auth: { jwtToken: credentials.jwtToken },
+      auth: { jwtToken: credentials.jwtToken, secretKey: credentials.secretKey },
     });
     if (!retryResult.ok) return errorResponse(502, "mra_rejection", summarizeErrors(retryResult), retryResult.errors);
     const newJwt2 = retryResult.data?.terminalCredentials?.jwtToken;
     const newSecret2 = retryResult.data?.terminalCredentials?.secretKey;
     if (newJwt2 && newSecret2) {
-      await db.from("terminal_secrets").upsert(
+      // access_key_enc is NOT NULL — preserve the value stored at activation.
+      const { data: existingSecret } = await db
+        .from("terminal_secrets")
+        .select("access_key_enc")
+        .eq("terminal_uid", terminal.id)
+        .maybeSingle();
+      // MRA rotates credentials on every refresh: the old JWT is revoked even if
+      // this upsert fails, so a persistence failure MUST be surfaced (a silent
+      // swallow leaves the terminal with credentials MRA no longer accepts).
+      const { error: upsertError } = await db.from("terminal_secrets").upsert(
         {
           terminal_uid: terminal.id,
           tenant_id: auth.context.tenantId,
+          access_key_enc: String(existingSecret?.["access_key_enc"] ?? ""),
           secret_key_enc: await sealSecret(newSecret2, env.masterKey, env.isProduction),
           session_token_enc: await sealSecret(newJwt2, env.masterKey, env.isProduction),
           updated_at: new Date().toISOString(),
         },
         { onConflict: "terminal_uid" },
       );
+      if (upsertError) {
+        return errorResponse(500, "credential_persist_failed", upsertError.message);
+      }
     }
     return json(retryResult.data ?? {});
   }
@@ -1458,23 +1520,36 @@ export async function handleRequestNewTerminalToken(request: Request): Promise<R
     env: r.env,
     path: MRA_PATHS.requestNewTerminalToken,
     payload: {},
-    auth: { jwtToken: r.credentials.jwtToken },
+    auth: { jwtToken: r.credentials.jwtToken, secretKey: r.credentials.secretKey },
   });
   if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
 
   const newJwt = result.data?.terminalCredentials?.jwtToken;
   const newSecret = result.data?.terminalCredentials?.secretKey;
   if (newJwt && newSecret) {
-    await r.db.from("terminal_secrets").upsert(
+    // access_key_enc is NOT NULL — preserve the value stored at activation.
+    const { data: existingSecret } = await r.db
+      .from("terminal_secrets")
+      .select("access_key_enc")
+      .eq("terminal_uid", r.terminal.id)
+      .maybeSingle();
+    // MRA rotates credentials on every refresh: the old JWT is revoked even if
+    // this upsert fails, so a persistence failure MUST be surfaced (a silent
+    // swallow leaves the terminal with credentials MRA no longer accepts).
+    const { error: upsertError } = await r.db.from("terminal_secrets").upsert(
       {
         terminal_uid: r.terminal.id,
         tenant_id: auth.context.tenantId,
+        access_key_enc: String(existingSecret?.["access_key_enc"] ?? ""),
         secret_key_enc: await sealSecret(newSecret, r.env.masterKey, r.env.isProduction),
         session_token_enc: await sealSecret(newJwt, r.env.masterKey, r.env.isProduction),
         updated_at: new Date().toISOString(),
       },
       { onConflict: "terminal_uid" },
     );
+    if (upsertError) {
+      return errorResponse(500, "credential_persist_failed", upsertError.message);
+    }
   }
 
   return json(result.data ?? {});
@@ -1487,7 +1562,7 @@ export async function handleValidateVat5(request: Request): Promise<Response> {
   if ("error" in r) return r.error;
   let raw: unknown;
   try { raw = await request.json(); } catch { return errorResponse(400, "invalid_json", "Request body is not valid JSON"); }
-  const result = await callMra({ env: r.env, path: MRA_PATHS.validateVat5, payload: raw, auth: { jwtToken: r.credentials.jwtToken } });
+  const result = await callMra({ env: r.env, path: MRA_PATHS.validateVat5, payload: raw, auth: { jwtToken: r.credentials.jwtToken, secretKey: r.credentials.secretKey } });
   if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
   return json(result.data ?? {});
 }
@@ -1497,7 +1572,7 @@ export async function handleTerminalBlockingMessage(request: Request): Promise<R
   if (!auth.ok) return auth.response;
   const r = await resolveTerminal(request, auth.context.tenantId);
   if ("error" in r) return r.error;
-  const result = await callMra({ env: r.env, path: MRA_PATHS.terminalBlockingMessage, payload: {}, auth: { jwtToken: r.credentials.jwtToken } });
+  const result = await callMra({ env: r.env, path: MRA_PATHS.terminalBlockingMessage, payload: {}, auth: { jwtToken: r.credentials.jwtToken, secretKey: r.credentials.secretKey } });
   if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
   return json(result.data ?? {});
 }
@@ -1507,7 +1582,7 @@ export async function handleCheckTerminalUnblockStatus(request: Request): Promis
   if (!auth.ok) return auth.response;
   const r = await resolveTerminal(request, auth.context.tenantId);
   if ("error" in r) return r.error;
-  const result = await callMra({ env: r.env, path: MRA_PATHS.checkTerminalUnblockStatus, payload: {}, auth: { jwtToken: r.credentials.jwtToken } });
+  const result = await callMra({ env: r.env, path: MRA_PATHS.checkTerminalUnblockStatus, payload: {}, auth: { jwtToken: r.credentials.jwtToken, secretKey: r.credentials.secretKey } });
   if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
   return json(result.data ?? {});
 }
@@ -1517,7 +1592,7 @@ export async function handleGetUnitsOfMeasure(request: Request): Promise<Respons
   if (!auth.ok) return auth.response;
   const r = await resolveTerminal(request, auth.context.tenantId);
   if ("error" in r) return r.error;
-  const result = await callMra({ env: r.env, path: MRA_PATHS.getUnitsOfMeasure, payload: {}, method: "GET", auth: { jwtToken: r.credentials.jwtToken } });
+  const result = await callMra({ env: r.env, path: MRA_PATHS.getUnitsOfMeasure, payload: {}, method: "GET", auth: { jwtToken: r.credentials.jwtToken, secretKey: r.credentials.secretKey } });
   if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
   return json(result.data ?? { units: [] });
 }
@@ -1529,7 +1604,7 @@ export async function handleGetRawMaterial(request: Request): Promise<Response> 
   if ("error" in r) return r.error;
   let raw: unknown;
   try { raw = await request.json(); } catch { raw = {}; }
-  const result = await callMra({ env: r.env, path: MRA_PATHS.getRawMaterial, payload: raw, auth: { jwtToken: r.credentials.jwtToken } });
+  const result = await callMra({ env: r.env, path: MRA_PATHS.getRawMaterial, payload: raw, auth: { jwtToken: r.credentials.jwtToken, secretKey: r.credentials.secretKey } });
   if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
   return json(result.data ?? {});
 }
@@ -1541,7 +1616,7 @@ export async function handleSubmitInformalPurchase(request: Request): Promise<Re
   if ("error" in r) return r.error;
   let raw: unknown;
   try { raw = await request.json(); } catch { return errorResponse(400, "invalid_json", "Request body is not valid JSON"); }
-  const result = await callMra({ env: r.env, path: MRA_PATHS.submitInformalPurchase, payload: raw, auth: { jwtToken: r.credentials.jwtToken } });
+  const result = await callMra({ env: r.env, path: MRA_PATHS.submitInformalPurchase, payload: raw, auth: { jwtToken: r.credentials.jwtToken, secretKey: r.credentials.secretKey } });
   await logMraCall(r.db, { tenantId: auth.context.tenantId, terminalUid: r.terminal.id, endpoint: MRA_PATHS.submitInformalPurchase, statusCode: result.httpStatus, durationMs: result.durationMs, ok: result.ok, request: JSON.stringify(raw), response: result.raw });
   if (!result.ok) return errorResponse(502, "mra_rejection", summarizeErrors(result), result.errors);
   return json(result.data ?? { status: "submitted" });

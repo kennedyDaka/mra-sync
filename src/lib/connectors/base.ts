@@ -123,4 +123,18 @@ export interface ErpConnector {
 
   /** Trigger raw material conversion */
   convertRawMaterial?(config: ConnectorConfig, conversion: ConversionRequest): Promise<ConversionResult>;
+
+  /**
+   * Normalize a native ERP/POS sale payload (pushed via webhook) into the
+   * middleware sales schema. Implemented by inbound adapters (e.g. Aronium,
+   * CliqPOS, Tally). Optional — connectors that only receive normalized
+   * payloads (generic-rest, generic-webhook) skip it.
+   */
+  ingestSale?(config: ConnectorConfig, raw: unknown): Promise<SubmitInvoicePayload>;
+
+  /**
+   * Normalize a native ERP/POS inventory payload (pushed via webhook) into
+   * product rows for `product_maps`. Optional.
+   */
+  ingestInventory?(config: ConnectorConfig, raw: unknown): Promise<Product[]>;
 }

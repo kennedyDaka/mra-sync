@@ -15,6 +15,7 @@
  * statusCode === 1 means success; anything < -1 is a business failure.
  */
 import type { MraEnv } from "./env.server";
+import { hmacSha512Base64 } from "./crypto.server";
 
 export interface MraApiError {
   errorCode?: number;
@@ -43,6 +44,12 @@ export interface MraAuth {
   xSignature?: string | null;
   /** Vendor Access Key (production activation only). */
   accessKey?: string | null;
+  /**
+   * Terminal secret key. When present, every POST with a body (except
+   * terminal activation) gets x-eis-message-hash =
+   * Base64(HMAC-SHA512(body, secretKey)) per the Developers Guide section 4.1.1.
+   */
+  secretKey?: string | null;
 }
 
 export const MRA_PATHS = {
@@ -116,6 +123,17 @@ export async function callMra<T = unknown>(options: {
   // MRA docs curl examples show raw JWT, but the official SDK and section 4.1.1.3
   // confirm Bearer prefix is required: "Bearer Authorization jwtToken".
   if (auth?.jwtToken) headers["authorization"] = `Bearer ${auth.jwtToken}`;
+  // x-eis-message-hash: Base64 HMAC-SHA512 over the raw request body, required
+  // on all requests except terminal activation (Developers Guide 4.1.1 + 9.2).
+  if (
+    auth?.secretKey &&
+    method !== "GET" &&
+    body &&
+    !auth.xSignature &&
+    path !== MRA_PATHS.activateTerminal
+  ) {
+    headers["x-eis-message-hash"] = await hmacSha512Base64(auth.secretKey, body);
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? env.timeoutMs);

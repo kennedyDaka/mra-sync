@@ -149,6 +149,147 @@ export const Route = createFileRoute("/api/ops/v1/connectors")({
           });
         });
       },
+      POST: async ({ request }) => {
+        const { withSecurity } = await import("@/lib/mra/security.server");
+        const { authenticateTenant } = await import("@/lib/mra/http.server");
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        return withSecurity(request, async () => {
+          const authResult = await authenticateTenant(supabaseAdmin, request);
+          if (!authResult.ok) return authResult.response;
+
+          const body = (await request.json()) as { action: string; [key: string]: unknown };
+          const { action, ...params } = body;
+
+          switch (action) {
+            case "list_connectors": {
+              const { listConnectors: getList } = await import("@/lib/connectors/registry");
+              return new Response(JSON.stringify({ connectors: getList() }), {
+                headers: { "content-type": "application/json" },
+              });
+            }
+            case "get_tenant_connectors": {
+              const { data: connectors } = await supabaseAdmin
+                .from("tenant_connectors")
+                .select("id, connector_type, sync_mode, is_active, last_sync_at, created_at")
+                .eq("tenant_id", authResult.context.tenantId)
+                .order("created_at", { ascending: false });
+              return new Response(JSON.stringify({ connectors: connectors ?? [] }), {
+                headers: { "content-type": "application/json" },
+              });
+            }
+            case "test_connector": {
+              const { getConnector } = await import("@/lib/connectors/registry");
+              const connectorType = params.connector_type as string;
+              const config = params.config as Record<string, string | number | boolean>;
+              const connector = getConnector(connectorType);
+              if (!connector) {
+                return new Response(JSON.stringify({ error: `Unknown connector: ${connectorType}` }), {
+                  status: 400,
+                  headers: { "content-type": "application/json" },
+                });
+              }
+              try {
+                const valid = await connector.validateCredentials(config);
+                return new Response(JSON.stringify({ valid }), {
+                  headers: { "content-type": "application/json" },
+                });
+              } catch (err: any) {
+                return new Response(JSON.stringify({ valid: false, error: err.message }), {
+                  headers: { "content-type": "application/json" },
+                });
+              }
+            }
+            case "save_connector": {
+              const { getConnector } = await import("@/lib/connectors/registry");
+              const { sealSecret } = await import("@/lib/mra/crypto.server");
+              const { readEnv } = await import("@/lib/mra/env.server");
+              const env = readEnv();
+              const connectorType = params.connector_type as string;
+              const config = params.config as Record<string, string | number | boolean>;
+              const syncMode = (params.sync_mode as string) ?? "auto";
+
+              const connector = getConnector(connectorType);
+              if (!connector) {
+                return new Response(JSON.stringify({ error: `Unknown connector: ${connectorType}` }), {
+                  status: 400,
+                  headers: { "content-type": "application/json" },
+                });
+              }
+
+              const configStr = JSON.stringify(config);
+              const encrypted = await sealSecret(configStr, env.masterKey, env.isProduction);
+
+              const { error } = await supabaseAdmin
+                .from("tenant_connectors")
+                .upsert(
+                  {
+                    tenant_id: authResult.context.tenantId,
+                    connector_type: connectorType,
+                    config_encrypted: encrypted,
+                    sync_mode: syncMode,
+                    is_active: true,
+                  },
+                  { onConflict: "tenant_id,connector_type" },
+                );
+
+              if (error) {
+                return new Response(JSON.stringify({ error: error.message }), {
+                  status: 500,
+                  headers: { "content-type": "application/json" },
+                });
+              }
+              return new Response(JSON.stringify({ saved: true }), {
+                headers: { "content-type": "application/json" },
+              });
+            }
+            case "delete_connector": {
+              const connectorType = params.connector_type as string;
+              const { error } = await supabaseAdmin
+                .from("tenant_connectors")
+                .delete()
+                .eq("tenant_id", authResult.context.tenantId)
+                .eq("connector_type", connectorType);
+
+              if (error) {
+                return new Response(JSON.stringify({ error: error.message }), {
+                  status: 500,
+                  headers: { "content-type": "application/json" },
+                });
+              }
+              return new Response(JSON.stringify({ deleted: true }), {
+                headers: { "content-type": "application/json" },
+              });
+            }
+            case "trigger_sync": {
+              const connectorType = params.connector_type as string;
+              const jobType = params.job_type as string;
+              const { error } = await supabaseAdmin
+                .from("sync_jobs")
+                .insert({
+                  tenant_id: authResult.context.tenantId,
+                  connector_type: connectorType,
+                  job_type: jobType,
+                  status: "pending",
+                });
+
+              if (error) {
+                return new Response(JSON.stringify({ error: error.message }), {
+                  status: 500,
+                  headers: { "content-type": "application/json" },
+                });
+              }
+              return new Response(JSON.stringify({ queued: true }), {
+                headers: { "content-type": "application/json" },
+              });
+            }
+            default:
+              return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), {
+                status: 400,
+                headers: { "content-type": "application/json" },
+              });
+          }
+        });
+      },
     },
   },
 });

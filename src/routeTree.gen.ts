@@ -13,6 +13,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedOpsRouteImport } from './routes/_authenticated/ops'
+import { Route as ApiCronSyncWorkerRouteImport } from './routes/api/cron/sync-worker'
+import { Route as ApiOpsV1BillingRouteImport } from './routes/api/ops/v1/billing'
 import { Route as ApiOpsV1ConnectorsRouteImport } from './routes/api/ops/v1/connectors'
 import { Route as ApiPublicHooksConfigSyncRouteImport } from './routes/api/public/hooks/config-sync'
 import { Route as ApiPublicHooksSyncWorkerRouteImport } from './routes/api/public/hooks/sync-worker'
@@ -20,8 +22,11 @@ import { Route as ApiPublicV1BillingRouteImport } from './routes/api/public/v1/b
 import { Route as ApiPublicV1ConfigRouteImport } from './routes/api/public/v1/config'
 import { Route as ApiPublicV1HealthRouteImport } from './routes/api/public/v1/health'
 import { Route as ApiPublicV1PingRouteImport } from './routes/api/public/v1/ping'
+import { Route as ApiPublicV1RecipeRouteImport } from './routes/api/public/v1/recipe'
 import { Route as ApiPublicV1RecipesRouteImport } from './routes/api/public/v1/recipes'
 import { Route as ApiPublicV1SalesRouteImport } from './routes/api/public/v1/sales'
+import { Route as ApiPublicV1IngestInventoryRouteImport } from './routes/api/public/v1/ingest/inventory'
+import { Route as ApiPublicV1IngestSalesRouteImport } from './routes/api/public/v1/ingest/sales'
 import { Route as ApiPublicV1InventoryAdjustmentRouteImport } from './routes/api/public/v1/inventory/adjustment'
 import { Route as ApiPublicV1InventoryAdjustmentReasonsRouteImport } from './routes/api/public/v1/inventory/adjustment-reasons'
 import { Route as ApiPublicV1InventoryConvertRouteImport } from './routes/api/public/v1/inventory/convert'
@@ -50,6 +55,8 @@ import { Route as ApiPublicV1TenantRefreshTokenRouteImport } from './routes/api/
 import { Route as ApiPublicV1UtilitiesBlockingMessageRouteImport } from './routes/api/public/v1/utilities/blocking-message'
 import { Route as ApiPublicV1UtilitiesUnblockStatusRouteImport } from './routes/api/public/v1/utilities/unblock-status'
 import { Route as ApiPublicV1UtilitiesValidateVat5RouteImport } from './routes/api/public/v1/utilities/validate-vat5'
+import { Route as ApiPublicV1IngestSourceInventoryRouteImport } from './routes/api/public/v1/ingest/$source/inventory'
+import { Route as ApiPublicV1IngestSourceSalesRouteImport } from './routes/api/public/v1/ingest/$source/sales'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -69,6 +76,16 @@ const AuthenticatedOpsRoute = AuthenticatedOpsRouteImport.update({
   id: '/ops',
   path: '/ops',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const ApiCronSyncWorkerRoute = ApiCronSyncWorkerRouteImport.update({
+  id: '/api/cron/sync-worker',
+  path: '/api/cron/sync-worker',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOpsV1BillingRoute = ApiOpsV1BillingRouteImport.update({
+  id: '/api/ops/v1/billing',
+  path: '/api/ops/v1/billing',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiOpsV1ConnectorsRoute = ApiOpsV1ConnectorsRouteImport.update({
   id: '/api/ops/v1/connectors',
@@ -107,6 +124,11 @@ const ApiPublicV1PingRoute = ApiPublicV1PingRouteImport.update({
   path: '/api/public/v1/ping',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicV1RecipeRoute = ApiPublicV1RecipeRouteImport.update({
+  id: '/api/public/v1/recipe',
+  path: '/api/public/v1/recipe',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicV1RecipesRoute = ApiPublicV1RecipesRouteImport.update({
   id: '/api/public/v1/recipes',
   path: '/api/public/v1/recipes',
@@ -115,6 +137,17 @@ const ApiPublicV1RecipesRoute = ApiPublicV1RecipesRouteImport.update({
 const ApiPublicV1SalesRoute = ApiPublicV1SalesRouteImport.update({
   id: '/api/public/v1/sales',
   path: '/api/public/v1/sales',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicV1IngestInventoryRoute =
+  ApiPublicV1IngestInventoryRouteImport.update({
+    id: '/api/public/v1/ingest/inventory',
+    path: '/api/public/v1/ingest/inventory',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicV1IngestSalesRoute = ApiPublicV1IngestSalesRouteImport.update({
+  id: '/api/public/v1/ingest/sales',
+  path: '/api/public/v1/ingest/sales',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicV1InventoryAdjustmentRoute =
@@ -284,11 +317,25 @@ const ApiPublicV1UtilitiesValidateVat5Route =
     path: '/api/public/v1/utilities/validate-vat5',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicV1IngestSourceInventoryRoute =
+  ApiPublicV1IngestSourceInventoryRouteImport.update({
+    id: '/api/public/v1/ingest/$source/inventory',
+    path: '/api/public/v1/ingest/$source/inventory',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicV1IngestSourceSalesRoute =
+  ApiPublicV1IngestSourceSalesRouteImport.update({
+    id: '/api/public/v1/ingest/$source/sales',
+    path: '/api/public/v1/ingest/$source/sales',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/ops': typeof AuthenticatedOpsRoute
+  '/api/cron/sync-worker': typeof ApiCronSyncWorkerRoute
+  '/api/ops/v1/billing': typeof ApiOpsV1BillingRoute
   '/api/ops/v1/connectors': typeof ApiOpsV1ConnectorsRoute
   '/api/public/hooks/config-sync': typeof ApiPublicHooksConfigSyncRoute
   '/api/public/hooks/sync-worker': typeof ApiPublicHooksSyncWorkerRoute
@@ -296,8 +343,11 @@ export interface FileRoutesByFullPath {
   '/api/public/v1/config': typeof ApiPublicV1ConfigRoute
   '/api/public/v1/health': typeof ApiPublicV1HealthRoute
   '/api/public/v1/ping': typeof ApiPublicV1PingRoute
+  '/api/public/v1/recipe': typeof ApiPublicV1RecipeRoute
   '/api/public/v1/recipes': typeof ApiPublicV1RecipesRouteWithChildren
   '/api/public/v1/sales': typeof ApiPublicV1SalesRouteWithChildren
+  '/api/public/v1/ingest/inventory': typeof ApiPublicV1IngestInventoryRoute
+  '/api/public/v1/ingest/sales': typeof ApiPublicV1IngestSalesRoute
   '/api/public/v1/inventory/adjustment': typeof ApiPublicV1InventoryAdjustmentRoute
   '/api/public/v1/inventory/adjustment-reasons': typeof ApiPublicV1InventoryAdjustmentReasonsRoute
   '/api/public/v1/inventory/convert': typeof ApiPublicV1InventoryConvertRoute
@@ -326,11 +376,15 @@ export interface FileRoutesByFullPath {
   '/api/public/v1/utilities/blocking-message': typeof ApiPublicV1UtilitiesBlockingMessageRoute
   '/api/public/v1/utilities/unblock-status': typeof ApiPublicV1UtilitiesUnblockStatusRoute
   '/api/public/v1/utilities/validate-vat5': typeof ApiPublicV1UtilitiesValidateVat5Route
+  '/api/public/v1/ingest/$source/inventory': typeof ApiPublicV1IngestSourceInventoryRoute
+  '/api/public/v1/ingest/$source/sales': typeof ApiPublicV1IngestSourceSalesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/ops': typeof AuthenticatedOpsRoute
+  '/api/cron/sync-worker': typeof ApiCronSyncWorkerRoute
+  '/api/ops/v1/billing': typeof ApiOpsV1BillingRoute
   '/api/ops/v1/connectors': typeof ApiOpsV1ConnectorsRoute
   '/api/public/hooks/config-sync': typeof ApiPublicHooksConfigSyncRoute
   '/api/public/hooks/sync-worker': typeof ApiPublicHooksSyncWorkerRoute
@@ -338,8 +392,11 @@ export interface FileRoutesByTo {
   '/api/public/v1/config': typeof ApiPublicV1ConfigRoute
   '/api/public/v1/health': typeof ApiPublicV1HealthRoute
   '/api/public/v1/ping': typeof ApiPublicV1PingRoute
+  '/api/public/v1/recipe': typeof ApiPublicV1RecipeRoute
   '/api/public/v1/recipes': typeof ApiPublicV1RecipesRouteWithChildren
   '/api/public/v1/sales': typeof ApiPublicV1SalesRouteWithChildren
+  '/api/public/v1/ingest/inventory': typeof ApiPublicV1IngestInventoryRoute
+  '/api/public/v1/ingest/sales': typeof ApiPublicV1IngestSalesRoute
   '/api/public/v1/inventory/adjustment': typeof ApiPublicV1InventoryAdjustmentRoute
   '/api/public/v1/inventory/adjustment-reasons': typeof ApiPublicV1InventoryAdjustmentReasonsRoute
   '/api/public/v1/inventory/convert': typeof ApiPublicV1InventoryConvertRoute
@@ -368,6 +425,8 @@ export interface FileRoutesByTo {
   '/api/public/v1/utilities/blocking-message': typeof ApiPublicV1UtilitiesBlockingMessageRoute
   '/api/public/v1/utilities/unblock-status': typeof ApiPublicV1UtilitiesUnblockStatusRoute
   '/api/public/v1/utilities/validate-vat5': typeof ApiPublicV1UtilitiesValidateVat5Route
+  '/api/public/v1/ingest/$source/inventory': typeof ApiPublicV1IngestSourceInventoryRoute
+  '/api/public/v1/ingest/$source/sales': typeof ApiPublicV1IngestSourceSalesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -375,6 +434,8 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/ops': typeof AuthenticatedOpsRoute
+  '/api/cron/sync-worker': typeof ApiCronSyncWorkerRoute
+  '/api/ops/v1/billing': typeof ApiOpsV1BillingRoute
   '/api/ops/v1/connectors': typeof ApiOpsV1ConnectorsRoute
   '/api/public/hooks/config-sync': typeof ApiPublicHooksConfigSyncRoute
   '/api/public/hooks/sync-worker': typeof ApiPublicHooksSyncWorkerRoute
@@ -382,8 +443,11 @@ export interface FileRoutesById {
   '/api/public/v1/config': typeof ApiPublicV1ConfigRoute
   '/api/public/v1/health': typeof ApiPublicV1HealthRoute
   '/api/public/v1/ping': typeof ApiPublicV1PingRoute
+  '/api/public/v1/recipe': typeof ApiPublicV1RecipeRoute
   '/api/public/v1/recipes': typeof ApiPublicV1RecipesRouteWithChildren
   '/api/public/v1/sales': typeof ApiPublicV1SalesRouteWithChildren
+  '/api/public/v1/ingest/inventory': typeof ApiPublicV1IngestInventoryRoute
+  '/api/public/v1/ingest/sales': typeof ApiPublicV1IngestSalesRoute
   '/api/public/v1/inventory/adjustment': typeof ApiPublicV1InventoryAdjustmentRoute
   '/api/public/v1/inventory/adjustment-reasons': typeof ApiPublicV1InventoryAdjustmentReasonsRoute
   '/api/public/v1/inventory/convert': typeof ApiPublicV1InventoryConvertRoute
@@ -412,6 +476,8 @@ export interface FileRoutesById {
   '/api/public/v1/utilities/blocking-message': typeof ApiPublicV1UtilitiesBlockingMessageRoute
   '/api/public/v1/utilities/unblock-status': typeof ApiPublicV1UtilitiesUnblockStatusRoute
   '/api/public/v1/utilities/validate-vat5': typeof ApiPublicV1UtilitiesValidateVat5Route
+  '/api/public/v1/ingest/$source/inventory': typeof ApiPublicV1IngestSourceInventoryRoute
+  '/api/public/v1/ingest/$source/sales': typeof ApiPublicV1IngestSourceSalesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -419,6 +485,8 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/ops'
+    | '/api/cron/sync-worker'
+    | '/api/ops/v1/billing'
     | '/api/ops/v1/connectors'
     | '/api/public/hooks/config-sync'
     | '/api/public/hooks/sync-worker'
@@ -426,8 +494,11 @@ export interface FileRouteTypes {
     | '/api/public/v1/config'
     | '/api/public/v1/health'
     | '/api/public/v1/ping'
+    | '/api/public/v1/recipe'
     | '/api/public/v1/recipes'
     | '/api/public/v1/sales'
+    | '/api/public/v1/ingest/inventory'
+    | '/api/public/v1/ingest/sales'
     | '/api/public/v1/inventory/adjustment'
     | '/api/public/v1/inventory/adjustment-reasons'
     | '/api/public/v1/inventory/convert'
@@ -456,11 +527,15 @@ export interface FileRouteTypes {
     | '/api/public/v1/utilities/blocking-message'
     | '/api/public/v1/utilities/unblock-status'
     | '/api/public/v1/utilities/validate-vat5'
+    | '/api/public/v1/ingest/$source/inventory'
+    | '/api/public/v1/ingest/$source/sales'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
     | '/ops'
+    | '/api/cron/sync-worker'
+    | '/api/ops/v1/billing'
     | '/api/ops/v1/connectors'
     | '/api/public/hooks/config-sync'
     | '/api/public/hooks/sync-worker'
@@ -468,8 +543,11 @@ export interface FileRouteTypes {
     | '/api/public/v1/config'
     | '/api/public/v1/health'
     | '/api/public/v1/ping'
+    | '/api/public/v1/recipe'
     | '/api/public/v1/recipes'
     | '/api/public/v1/sales'
+    | '/api/public/v1/ingest/inventory'
+    | '/api/public/v1/ingest/sales'
     | '/api/public/v1/inventory/adjustment'
     | '/api/public/v1/inventory/adjustment-reasons'
     | '/api/public/v1/inventory/convert'
@@ -498,12 +576,16 @@ export interface FileRouteTypes {
     | '/api/public/v1/utilities/blocking-message'
     | '/api/public/v1/utilities/unblock-status'
     | '/api/public/v1/utilities/validate-vat5'
+    | '/api/public/v1/ingest/$source/inventory'
+    | '/api/public/v1/ingest/$source/sales'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/ops'
+    | '/api/cron/sync-worker'
+    | '/api/ops/v1/billing'
     | '/api/ops/v1/connectors'
     | '/api/public/hooks/config-sync'
     | '/api/public/hooks/sync-worker'
@@ -511,8 +593,11 @@ export interface FileRouteTypes {
     | '/api/public/v1/config'
     | '/api/public/v1/health'
     | '/api/public/v1/ping'
+    | '/api/public/v1/recipe'
     | '/api/public/v1/recipes'
     | '/api/public/v1/sales'
+    | '/api/public/v1/ingest/inventory'
+    | '/api/public/v1/ingest/sales'
     | '/api/public/v1/inventory/adjustment'
     | '/api/public/v1/inventory/adjustment-reasons'
     | '/api/public/v1/inventory/convert'
@@ -541,12 +626,16 @@ export interface FileRouteTypes {
     | '/api/public/v1/utilities/blocking-message'
     | '/api/public/v1/utilities/unblock-status'
     | '/api/public/v1/utilities/validate-vat5'
+    | '/api/public/v1/ingest/$source/inventory'
+    | '/api/public/v1/ingest/$source/sales'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ApiCronSyncWorkerRoute: typeof ApiCronSyncWorkerRoute
+  ApiOpsV1BillingRoute: typeof ApiOpsV1BillingRoute
   ApiOpsV1ConnectorsRoute: typeof ApiOpsV1ConnectorsRoute
   ApiPublicHooksConfigSyncRoute: typeof ApiPublicHooksConfigSyncRoute
   ApiPublicHooksSyncWorkerRoute: typeof ApiPublicHooksSyncWorkerRoute
@@ -554,8 +643,11 @@ export interface RootRouteChildren {
   ApiPublicV1ConfigRoute: typeof ApiPublicV1ConfigRoute
   ApiPublicV1HealthRoute: typeof ApiPublicV1HealthRoute
   ApiPublicV1PingRoute: typeof ApiPublicV1PingRoute
+  ApiPublicV1RecipeRoute: typeof ApiPublicV1RecipeRoute
   ApiPublicV1RecipesRoute: typeof ApiPublicV1RecipesRouteWithChildren
   ApiPublicV1SalesRoute: typeof ApiPublicV1SalesRouteWithChildren
+  ApiPublicV1IngestInventoryRoute: typeof ApiPublicV1IngestInventoryRoute
+  ApiPublicV1IngestSalesRoute: typeof ApiPublicV1IngestSalesRoute
   ApiPublicV1InventoryAdjustmentRoute: typeof ApiPublicV1InventoryAdjustmentRoute
   ApiPublicV1InventoryAdjustmentReasonsRoute: typeof ApiPublicV1InventoryAdjustmentReasonsRoute
   ApiPublicV1InventoryConvertRoute: typeof ApiPublicV1InventoryConvertRoute
@@ -577,6 +669,8 @@ export interface RootRouteChildren {
   ApiPublicV1UtilitiesBlockingMessageRoute: typeof ApiPublicV1UtilitiesBlockingMessageRoute
   ApiPublicV1UtilitiesUnblockStatusRoute: typeof ApiPublicV1UtilitiesUnblockStatusRoute
   ApiPublicV1UtilitiesValidateVat5Route: typeof ApiPublicV1UtilitiesValidateVat5Route
+  ApiPublicV1IngestSourceInventoryRoute: typeof ApiPublicV1IngestSourceInventoryRoute
+  ApiPublicV1IngestSourceSalesRoute: typeof ApiPublicV1IngestSourceSalesRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -608,6 +702,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/ops'
       preLoaderRoute: typeof AuthenticatedOpsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/cron/sync-worker': {
+      id: '/api/cron/sync-worker'
+      path: '/api/cron/sync-worker'
+      fullPath: '/api/cron/sync-worker'
+      preLoaderRoute: typeof ApiCronSyncWorkerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/ops/v1/billing': {
+      id: '/api/ops/v1/billing'
+      path: '/api/ops/v1/billing'
+      fullPath: '/api/ops/v1/billing'
+      preLoaderRoute: typeof ApiOpsV1BillingRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/ops/v1/connectors': {
       id: '/api/ops/v1/connectors'
@@ -658,6 +766,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicV1PingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/v1/recipe': {
+      id: '/api/public/v1/recipe'
+      path: '/api/public/v1/recipe'
+      fullPath: '/api/public/v1/recipe'
+      preLoaderRoute: typeof ApiPublicV1RecipeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/v1/recipes': {
       id: '/api/public/v1/recipes'
       path: '/api/public/v1/recipes'
@@ -670,6 +785,20 @@ declare module '@tanstack/react-router' {
       path: '/api/public/v1/sales'
       fullPath: '/api/public/v1/sales'
       preLoaderRoute: typeof ApiPublicV1SalesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/v1/ingest/inventory': {
+      id: '/api/public/v1/ingest/inventory'
+      path: '/api/public/v1/ingest/inventory'
+      fullPath: '/api/public/v1/ingest/inventory'
+      preLoaderRoute: typeof ApiPublicV1IngestInventoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/v1/ingest/sales': {
+      id: '/api/public/v1/ingest/sales'
+      path: '/api/public/v1/ingest/sales'
+      fullPath: '/api/public/v1/ingest/sales'
+      preLoaderRoute: typeof ApiPublicV1IngestSalesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/v1/inventory/adjustment': {
@@ -868,6 +997,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicV1UtilitiesValidateVat5RouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/v1/ingest/$source/inventory': {
+      id: '/api/public/v1/ingest/$source/inventory'
+      path: '/api/public/v1/ingest/$source/inventory'
+      fullPath: '/api/public/v1/ingest/$source/inventory'
+      preLoaderRoute: typeof ApiPublicV1IngestSourceInventoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/v1/ingest/$source/sales': {
+      id: '/api/public/v1/ingest/$source/sales'
+      path: '/api/public/v1/ingest/$source/sales'
+      fullPath: '/api/public/v1/ingest/$source/sales'
+      preLoaderRoute: typeof ApiPublicV1IngestSourceSalesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -920,6 +1063,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  ApiCronSyncWorkerRoute: ApiCronSyncWorkerRoute,
+  ApiOpsV1BillingRoute: ApiOpsV1BillingRoute,
   ApiOpsV1ConnectorsRoute: ApiOpsV1ConnectorsRoute,
   ApiPublicHooksConfigSyncRoute: ApiPublicHooksConfigSyncRoute,
   ApiPublicHooksSyncWorkerRoute: ApiPublicHooksSyncWorkerRoute,
@@ -927,8 +1072,11 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicV1ConfigRoute: ApiPublicV1ConfigRoute,
   ApiPublicV1HealthRoute: ApiPublicV1HealthRoute,
   ApiPublicV1PingRoute: ApiPublicV1PingRoute,
+  ApiPublicV1RecipeRoute: ApiPublicV1RecipeRoute,
   ApiPublicV1RecipesRoute: ApiPublicV1RecipesRouteWithChildren,
   ApiPublicV1SalesRoute: ApiPublicV1SalesRouteWithChildren,
+  ApiPublicV1IngestInventoryRoute: ApiPublicV1IngestInventoryRoute,
+  ApiPublicV1IngestSalesRoute: ApiPublicV1IngestSalesRoute,
   ApiPublicV1InventoryAdjustmentRoute: ApiPublicV1InventoryAdjustmentRoute,
   ApiPublicV1InventoryAdjustmentReasonsRoute:
     ApiPublicV1InventoryAdjustmentReasonsRoute,
@@ -956,6 +1104,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicV1UtilitiesUnblockStatusRoute:
     ApiPublicV1UtilitiesUnblockStatusRoute,
   ApiPublicV1UtilitiesValidateVat5Route: ApiPublicV1UtilitiesValidateVat5Route,
+  ApiPublicV1IngestSourceInventoryRoute: ApiPublicV1IngestSourceInventoryRoute,
+  ApiPublicV1IngestSourceSalesRoute: ApiPublicV1IngestSourceSalesRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

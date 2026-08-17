@@ -48,7 +48,7 @@ Open http://localhost:5173/ops to access the Ops Console.
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/api/public/v1/health` | Liveness + MRA gateway probe |
-| `POST` | `/api/public/v1/config` | Terminal config (tax rates, offline limits) |
+| `GET` | `/api/public/v1/config` | Terminal config (tax rates, offline limits) |
 | `POST` | `/api/public/v1/ping` | MRA gateway connectivity check |
 
 ### Terminal Management
@@ -108,10 +108,25 @@ Open http://localhost:5173/ops to access the Ops Console.
 | `POST` | `/api/public/v1/utilities/blocking-message` | Get terminal blocking message |
 | `POST` | `/api/public/v1/utilities/unblock-status` | Check terminal unblock status |
 
+### ERP/POS Ingestion (Webhooks)
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/public/v1/ingest/sales` | Normalized sale payload (middleware sales schema) |
+| `POST` | `/api/public/v1/ingest/inventory` | Normalized inventory payload (middleware inventory schema) |
+| `POST` | `/api/public/v1/ingest/{source}/sales` | Native sale payload (source: aronium, cliqpos, erpnext, kiboerp, odoo, sap-b1, tally) |
+| `POST` | `/api/public/v1/ingest/{source}/inventory` | Native inventory payload (CSV text for sage, JSON otherwise) |
+| `GET` | `/api/public/v1/recipe` | Get a recipe by `recipe_id` query param |
+
+Ingest endpoints authenticate with `Authorization: Bearer <api_token>` **or** webhook auth via
+`X-Tenant-ID` + `X-Webhook-Secret` (or `X-Webhook-Signature`, an HMAC-SHA256 hex digest of the raw
+body using the connector's webhook secret). Terminal resolution: `X-Terminal-ID` header →
+connector `default_terminal_id` → tenant's first active terminal.
+
 ### Billing
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/public/v1/billing` | List store billing |
+| `GET` | `/api/public/v1/billing` | List store billing (tenant) |
+| `GET` | `/api/ops/v1/billing` | List store billing (admin) |
 
 All API endpoints (except `/health`) require:
 - `Authorization: Bearer <api_token>` header
@@ -140,13 +155,28 @@ All API endpoints (except `/health`) require:
 | `store_billing` | Per-store billing (MWK 30,000/store) |
 | `fraud_alerts` | AI fraud detection alerts |
 
+## Built-in Connectors
+
+| Type | System | Ingest (push) | Pull |
+|---|---|---|---|
+| `odoo` | Odoo ERP | Sales + inventory | Products |
+| `generic-rest` | Any REST ERP | — | Products / invoices / stock |
+| `generic-webhook` | Custom webhook (push) | Sales + inventory (HMAC-signed) | — |
+| `aronium` | Aronium POS | Sales + inventory | — |
+| `cliqpos` | CliqPOS | Sales + inventory | — |
+| `erpnext` | ERPNext | Sales + inventory | — |
+| `kiboerp` | Kibo ERP (Mozu) | Sales + inventory | — |
+| `sage` | Sage (Pastel / Evolution) | Inventory (CSV) | — |
+| `sap-b1` | SAP Business One | Sales + inventory | — |
+| `tally` | Tally ERP 9 | Sales + inventory | — |
+
 ## Dev vs Production Mode
 
 | Behavior | Development | Production |
 |---|---|---|
 | MRA API URL | `dev-eis-api.mra.mw` | `eis-api.mra.mw` |
 | Receipt validation URL | `dev-eis-portal.mra.mw` | `eis-portal.mra.mw` |
-| Credential storage | Plaintext (`plain:text`) | AES-256-GCM encrypted (`gcm:iv.cipher`) |
+| Credential storage | AES-256-GCM (`gcm:iv.cipher`) | AES-256-GCM (`gcm:iv.cipher`) |
 | CORS origins | `localhost:5173`, `localhost:3000` | `mraconnect.app` domains |
 | HSTS header | Not set | Set (2-year max-age) |
 | Activation access key | Not sent | `x-access-key` header sent |

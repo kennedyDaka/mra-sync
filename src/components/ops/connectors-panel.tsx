@@ -13,6 +13,7 @@ import {
   Database,
   Globe,
   Webhook,
+  Store,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -33,7 +34,17 @@ interface Props {
   tenantId: string;
 }
 
-type ConnectorType = "odoo" | "generic-rest" | "generic-webhook";
+type ConnectorType =
+  | "odoo"
+  | "generic-rest"
+  | "generic-webhook"
+  | "aronium"
+  | "cliqpos"
+  | "erpnext"
+  | "kiboerp"
+  | "sage"
+  | "sap-b1"
+  | "tally";
 
 const CONNECTOR_CARDS: Record<
   ConnectorType,
@@ -68,6 +79,81 @@ const CONNECTOR_CARDS: Record<
     icon: Webhook,
     authFields: [
       { key: "webhook_secret", label: "Webhook Secret", placeholder: "shared HMAC secret", type: "password" },
+      { key: "default_terminal_id", label: "Default MRA Terminal ID (optional)", placeholder: "terminal id", type: "text", required: false },
+    ],
+  },
+  aronium: {
+    label: "Aronium POS",
+    description: "Native Aronium push: sales and inventory accepted at /ingest/aronium/*.",
+    icon: Store,
+    authFields: [
+      { key: "database_file", label: "Database File (.db)", placeholder: "path to Aronium db", type: "text" },
+      { key: "default_terminal_id", label: "Default MRA Terminal ID (optional)", placeholder: "terminal id", type: "text", required: false },
+    ],
+  },
+  cliqpos: {
+    label: "CliqPOS",
+    description: "Native CliqPOS push: sales and inventory accepted at /ingest/cliqpos/*.",
+    icon: Store,
+    authFields: [
+      { key: "merchant_id", label: "Merchant ID", placeholder: "merchant id", type: "text" },
+      { key: "terminal_id", label: "Terminal ID", placeholder: "terminal id", type: "text", required: false },
+      { key: "api_key", label: "API Key", placeholder: "api key", type: "password" },
+      { key: "default_terminal_id", label: "Default MRA Terminal ID (optional)", placeholder: "terminal id", type: "text", required: false },
+    ],
+  },
+  erpnext: {
+    label: "ERPNext",
+    description: "ERPNext via REST API: sales and inventory accepted at /ingest/erpnext/*.",
+    icon: Database,
+    authFields: [
+      { key: "url", label: "ERPNext URL", placeholder: "https://erp.yourcompany.com", type: "url" },
+      { key: "api_key", label: "API Key", placeholder: "api key", type: "password" },
+      { key: "api_secret", label: "API Secret", placeholder: "api secret", type: "password" },
+      { key: "default_terminal_id", label: "Default MRA Terminal ID (optional)", placeholder: "terminal id", type: "text", required: false },
+    ],
+  },
+  kiboerp: {
+    label: "Kibo ERP",
+    description: "Kibo ERP (Mozu): sales and inventory accepted at /ingest/kiboerp/*.",
+    icon: Database,
+    authFields: [
+      { key: "tenant", label: "Tenant", placeholder: "tenant id", type: "text" },
+      { key: "site", label: "Site", placeholder: "site id", type: "text" },
+      { key: "client_id", label: "Client ID", placeholder: "client id", type: "text" },
+      { key: "shared_secret", label: "Shared Secret", placeholder: "shared secret", type: "password" },
+      { key: "default_terminal_id", label: "Default MRA Terminal ID (optional)", placeholder: "terminal id", type: "text", required: false },
+    ],
+  },
+  sage: {
+    label: "Sage (Pastel / Evolution)",
+    description: "Sage inventory via CSV import at /ingest/sage/inventory. Sale ingestion is not supported.",
+    icon: Database,
+    authFields: [
+      { key: "csv_url", label: "Inventory CSV URL", placeholder: "https://.../inventory.csv", type: "url" },
+      { key: "default_terminal_id", label: "Default MRA Terminal ID (optional)", placeholder: "terminal id", type: "text", required: false },
+    ],
+  },
+  "sap-b1": {
+    label: "SAP Business One",
+    description: "SAP B1 via Service Layer: sales and inventory accepted at /ingest/sap-b1/*.",
+    icon: Database,
+    authFields: [
+      { key: "url", label: "Service Layer URL", placeholder: "https://sl.yourcompany.com:50000/b1s/v2", type: "url" },
+      { key: "username", label: "Username", placeholder: "username", type: "text" },
+      { key: "password", label: "Password", placeholder: "", type: "password" },
+      { key: "company_db", label: "Company Database", placeholder: "SBODemoUS", type: "text" },
+      { key: "default_terminal_id", label: "Default MRA Terminal ID (optional)", placeholder: "terminal id", type: "text", required: false },
+    ],
+  },
+  tally: {
+    label: "Tally ERP 9",
+    description: "Tally via HTTP API: sales and inventory accepted at /ingest/tally/*.",
+    icon: Database,
+    authFields: [
+      { key: "url", label: "Tally URL", placeholder: "http://localhost", type: "url" },
+      { key: "port", label: "Tally Port", placeholder: "9000", type: "number" },
+      { key: "default_terminal_id", label: "Default MRA Terminal ID (optional)", placeholder: "terminal id", type: "text", required: false },
     ],
   },
 };
@@ -77,6 +163,7 @@ interface AuthField {
   label: string;
   placeholder: string;
   type: string;
+  required?: boolean;
 }
 
 export function ConnectorsPanel({ tenantId }: Props) {
@@ -187,6 +274,19 @@ export function ConnectorsPanel({ tenantId }: Props) {
   const configuredTypes = new Set((tenantConnectors.data ?? []).map((c: any) => c.connector_type));
   const activeConnectors = (tenantConnectors.data ?? []).filter((c: any) => c.is_active);
 
+  const syncJobs = useQuery({
+    queryKey: ["sync-jobs", tenantId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("sync_jobs")
+        .select("id, connector_type, job_type, status, error, created_at, completed_at")
+        .eq("tenant_id", tenantId)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      return data ?? [];
+    },
+  });
+
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_24rem]">
       {/* Left: Main content area */}
@@ -242,6 +342,32 @@ export function ConnectorsPanel({ tenantId }: Props) {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Sync Jobs History */}
+        {(syncJobs.data ?? []).length > 0 && (
+          <div className="panel divide-y divide-border">
+            <div className="flex items-center gap-2 px-4 py-3">
+              <RefreshCcw className="size-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold">Recent sync jobs</h3>
+            </div>
+            {(syncJobs.data ?? []).map((job: any) => (
+              <div key={job.id} className="flex items-center justify-between px-4 py-2 text-sm">
+                <div className="flex items-center gap-3">
+                  <StatusPill value={job.status} />
+                  <span className="mono-tag text-xs text-muted-foreground">
+                    {job.job_type} · {job.connector_type}
+                  </span>
+                </div>
+                <div className="text-right text-xs text-muted-foreground">
+                  {job.error && (
+                    <span className="text-destructive mr-2">{job.error.slice(0, 50)}</span>
+                  )}
+                  {new Date(job.created_at).toLocaleString()}
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
@@ -320,11 +446,9 @@ export function ConnectorsPanel({ tenantId }: Props) {
               </Button>
               <Button
                 onClick={() => setStep("test")}
-                disabled={
-                  CONNECTOR_CARDS[selectedType].authFields.some(
-                    (f) => !config[f.key]?.trim()
-                  )
-                }
+                disabled={CONNECTOR_CARDS[selectedType].authFields.some(
+                  (f) => (f.required ?? true) && !config[f.key]?.trim()
+                )}
               >
                 Next: Test <ArrowRight className="size-4" />
               </Button>

@@ -359,7 +359,7 @@ export async function handleConvertRecipe(request: Request): Promise<Response> {
     env,
     path: MRA_PATHS.submitConversion,
     payload: mraPayload,
-    auth: { jwtToken: credentials.jwtToken },
+    auth: { jwtToken: credentials.jwtToken, secretKey: credentials.secretKey },
   });
 
   await logMraCall(db, {

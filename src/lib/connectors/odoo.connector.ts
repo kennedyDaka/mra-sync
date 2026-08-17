@@ -188,4 +188,71 @@ export class OdooConnector implements ErpConnector {
   async syncInventory(config: ConnectorConfig): Promise<Product[]> {
     return this.listProducts(config);
   }
+
+  async ingestSale(_config: ConnectorConfig, raw: unknown): Promise<SubmitInvoicePayload> {
+    const order = (raw ?? {}) as {
+      name?: unknown;
+      partner_name?: unknown;
+      partner_vat?: unknown;
+      amount_total?: unknown;
+      order_lines?: Array<{ product_id?: unknown; product_name?: unknown; default_code?: unknown; barcode?: unknown; quantity?: unknown; price_unit?: unknown }>;
+      lines?: Array<{ product_id?: unknown; product_name?: unknown; default_code?: unknown; barcode?: unknown; quantity?: unknown; price_unit?: unknown }>;
+    };
+    const lines = Array.isArray(order.order_lines) && order.order_lines.length > 0 ? order.order_lines : (Array.isArray(order.lines) ? order.lines : []);
+    if (lines.length === 0) {
+      throw new Error("odoo: invalid sale payload: no order lines");
+    }
+    if (!str(order.name)) {
+      throw new Error("odoo: name is required");
+    }
+
+    return {
+      erp_invoice_number: String(order.name),
+      buyer_name: str(order.partner_name),
+      customer_tin: str(order.partner_vat),
+      payment_method: Number(order.amount_total ?? 0) > 0 ? "BankTransfer" : "Cash",
+      line_items: lines.map((line) => ({
+        erp_sku: str(line.default_code) || `ODOO-${String(line.product_id ?? "")}`,
+        description: str(line.product_name),
+        quantity: num(line.quantity),
+        unit_price: num(line.price_unit),
+      })),
+    };
+  }
+
+  async ingestInventory(_config: ConnectorConfig, raw: unknown): Promise<Product[]> {
+    const inv = (raw ?? {}) as {
+      products?: Array<{
+        id?: unknown;
+        default_code?: unknown;
+        name?: unknown;
+        barcode?: unknown;
+        qty_available?: unknown;
+        list_price?: unknown;
+        cost_price?: unknown;
+        type?: unknown;
+        uom?: unknown;
+      }>;
+    };
+    if (!Array.isArray(inv.products)) {
+      throw new Error("odoo: invalid inventory payload: missing products array");
+    }
+
+    return inv.products.map((p) => ({
+      local_sku: str(p.default_code) || `ODOO-${String(p.id ?? "")}`,
+      description: str(p.name),
+      unit_price: num(p.list_price),
+      quantity_on_hand: num(p.qty_available),
+      product_type: str(p.type) === "service" ? "service" : "product",
+    }));
+  }
+}
+
+function num(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function str(value: unknown): string {
+  return typeof value === "string" ? value.trim() : value == null ? "" : String(value).trim();
 }

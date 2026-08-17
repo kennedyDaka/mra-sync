@@ -141,9 +141,22 @@ async function processJob(
       break;
 
     case "invoice_push":
-      // Invoice push is handled inline during sales submission, not via cron
-      // This job type exists for manual retry scenarios
-      console.log(`[sync-worker] Invoice push job ${job.id} — handled at submission time`);
+      // Retry scenario: push a previously-submitted invoice to the ERP.
+      // Normal pushes happen inline at submission time (pushInvoiceToErp).
+      if (!job.payload) {
+        throw new Error("invoice_push job requires an invoice payload");
+      }
+      {
+        const result = await pushInvoiceToErp(
+          db,
+          job.tenant_id,
+          job.connector_type,
+          job.payload as Parameters<typeof pushInvoiceToErp>[3],
+        );
+        if (!result.ok) {
+          throw new Error(result.error ?? "Invoice push failed");
+        }
+      }
       break;
 
     default:
@@ -175,7 +188,6 @@ async function syncProducts(
         quantity_on_hand: product.quantity_on_hand,
         product_type: product.product_type,
         tax_rate_id: product.tax_rate_id ?? "A",
-        source: "erp_sync",
       },
       { onConflict: "tenant_id,local_sku" },
     );
@@ -270,7 +282,7 @@ export async function pushInvoiceToErp(
 
   try {
     const result = await connector.submitInvoice(config, invoice);
-    return { ok: result.ok, error: result.error };
+    return result.ok ? { ok: true } : { ok: false, error: result.error ?? "Invoice push failed" };
   } catch (err: any) {
     return { ok: false, error: err.message };
   }

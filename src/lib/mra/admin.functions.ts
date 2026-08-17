@@ -254,3 +254,295 @@ export const activateTerminalSelfService = createServerFn({ method: "POST" })
       mode: String(body["mode"] ?? ""),
     };
   });
+
+/* --------------------------------------------- terminal operations (ops) */
+
+const terminalInput = z.object({
+  tenant_id: z.string().uuid(),
+  terminal_id: z.string().trim().min(1).max(80),
+});
+
+/**
+ * Request a fresh JWT + secret from MRA and re-seal them for the terminal.
+ * Mirrors the public POST /api/public/v1/tenant/refresh-token endpoint.
+ */
+export const refreshTerminalToken = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => terminalInput.parse(input))
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { readEnv } = await import("@/lib/mra/env.server");
+    const { callMra, MRA_PATHS, summarizeErrors } = await import("@/lib/mra/mra-client.server");
+    const { loadCredentials, logMraCall } = await import("@/lib/mra/sales.server");
+    const { sealSecret } = await import("@/lib/mra/crypto.server");
+    const { auditLog } = await import("@/lib/mra/http.server");
+
+    const { data: terminal } = await supabaseAdmin
+      .from("terminals")
+      .select("id, tenant_id")
+      .eq("tenant_id", data.tenant_id)
+      .eq("terminal_id", data.terminal_id)
+      .maybeSingle();
+    if (!terminal) throw new Error("Terminal not found for this merchant");
+
+    const env = readEnv();
+    const credentials = await loadCredentials(supabaseAdmin as never, env, terminal.id);
+    if (!credentials) throw new Error("Terminal credentials are missing");
+
+    // access_key_enc is NOT NULL — preserve the value stored at activation.
+    const { data: existingSecret } = await supabaseAdmin
+      .from("terminal_secrets")
+      .select("access_key_enc")
+      .eq("terminal_uid", terminal.id)
+      .maybeSingle();
+
+    const result = await callMra<{ terminalCredentials?: { jwtToken?: string; secretKey?: string } }>({
+      env,
+      path: MRA_PATHS.requestNewTerminalToken,
+      payload: {},
+      auth: { jwtToken: credentials.jwtToken, secretKey: credentials.secretKey },
+    });
+    await logMraCall(supabaseAdmin as never, {
+      tenantId: data.tenant_id,
+      terminalUid: terminal.id,
+      endpoint: MRA_PATHS.requestNewTerminalToken,
+      statusCode: result.httpStatus,
+      durationMs: result.durationMs,
+      ok: result.ok,
+      request: "{}",
+      response: result.raw || (result.error ?? ""),
+    });
+    if (!result.ok) throw new Error(summarizeErrors(result));
+
+    const jwt = result.data?.terminalCredentials?.jwtToken;
+    const secret = result.data?.terminalCredentials?.secretKey;
+    if (jwt && secret) {
+      // MRA rotates credentials on every refresh: the old JWT is revoked even if
+      // this upsert fails, so a persistence failure MUST be surfaced (a silent
+      // swallow leaves the terminal with credentials MRA no longer accepts).
+      const { error: upsertError } = await supabaseAdmin.from("terminal_secrets").upsert(
+        {
+          terminal_uid: terminal.id,
+          tenant_id: data.tenant_id,
+          access_key_enc: String(existingSecret?.["access_key_enc"] ?? ""),
+          secret_key_enc: await sealSecret(secret, env.masterKey, env.isProduction),
+          session_token_enc: await sealSecret(jwt, env.masterKey, env.isProduction),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "terminal_uid" },
+      );
+      if (upsertError) throw new Error(`Failed to persist rotated credentials: ${upsertError.message}`);
+      await supabaseAdmin
+        .from("terminals")
+        .update({ last_error: null })
+        .eq("id", terminal.id);
+    }
+
+    await auditLog(supabaseAdmin as never, {
+      tenantId: data.tenant_id,
+      actorId: context.userId,
+      action: "terminal.refresh-token",
+      resourceType: "terminal",
+      resourceId: terminal.id,
+      metadata: { terminal_id: data.terminal_id },
+    });
+
+    return { refreshed: Boolean(jwt && secret), data: result.data ?? {} };
+  });
+
+/**
+ * Retry the MRA activation confirmation handshake for a terminal stuck in
+ * "pending" (activation succeeded, confirmation failed). Mirrors
+ * POST /api/public/v1/tenant/confirm-activation.
+ */
+export const confirmActivationRetry = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => terminalInput.parse(input))
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { readEnv } = await import("@/lib/mra/env.server");
+    const { callMra, MRA_PATHS, summarizeErrors } = await import("@/lib/mra/mra-client.server");
+    const { loadCredentials, logMraCall } = await import("@/lib/mra/sales.server");
+    const { hmacSha512Base64 } = await import("@/lib/mra/crypto.server");
+    const { auditLog } = await import("@/lib/mra/http.server");
+
+    const { data: terminal } = await supabaseAdmin
+      .from("terminals")
+      .select("id, tenant_id, activation_code, mra_terminal_ref")
+      .eq("tenant_id", data.tenant_id)
+      .eq("terminal_id", data.terminal_id)
+      .maybeSingle();
+    if (!terminal) throw new Error("Terminal not found for this merchant");
+    const tac = (terminal as Record<string, unknown>)["activation_code"] as string | null;
+    const mraRef = (terminal as Record<string, unknown>)["mra_terminal_ref"] as string | null;
+    if (!tac) throw new Error("No activation code stored for this terminal");
+    if (!mraRef) throw new Error("Terminal has no MRA terminal reference — activate it first");
+
+    const env = readEnv();
+    const credentials = await loadCredentials(supabaseAdmin as never, env, terminal.id);
+    if (!credentials) throw new Error("Terminal credentials are missing");
+
+    const signature = await hmacSha512Base64(credentials.secretKey, tac);
+    const result = await callMra({
+      env,
+      path: MRA_PATHS.terminalActivatedConfirmation,
+      payload: { terminalId: mraRef },
+      auth: { xSignature: signature, jwtToken: credentials.jwtToken },
+      timeoutMs: 20_000,
+    });
+    await logMraCall(supabaseAdmin as never, {
+      tenantId: data.tenant_id,
+      terminalUid: terminal.id,
+      endpoint: MRA_PATHS.terminalActivatedConfirmation,
+      statusCode: result.httpStatus,
+      durationMs: result.durationMs,
+      ok: result.ok,
+      request: JSON.stringify({ terminalId: mraRef }),
+      response: result.raw || (result.error ?? ""),
+    });
+    if (!result.ok) throw new Error(summarizeErrors(result));
+
+    await supabaseAdmin
+      .from("terminals")
+      .update({
+        status: "active",
+        confirmed_at: new Date().toISOString(),
+        is_blocked: false,
+        blocking_message: null,
+        last_error: null,
+      })
+      .eq("id", terminal.id);
+
+    await auditLog(supabaseAdmin as never, {
+      tenantId: data.tenant_id,
+      actorId: context.userId,
+      action: "terminal.confirm-activation",
+      resourceType: "terminal",
+      resourceId: terminal.id,
+      metadata: { terminal_id: data.terminal_id },
+    });
+
+    return { confirmed: true };
+  });
+
+/**
+ * Pull the MRA blocking message for a terminal and store it locally.
+ * Mirrors POST /api/public/v1/utilities/blocking-message.
+ */
+export const getTerminalBlockingMessage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => terminalInput.parse(input))
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { readEnv } = await import("@/lib/mra/env.server");
+    const { callMra, MRA_PATHS, summarizeErrors } = await import("@/lib/mra/mra-client.server");
+    const { loadCredentials, logMraCall } = await import("@/lib/mra/sales.server");
+    const { auditLog } = await import("@/lib/mra/http.server");
+
+    const { data: terminal } = await supabaseAdmin
+      .from("terminals")
+      .select("id, tenant_id")
+      .eq("tenant_id", data.tenant_id)
+      .eq("terminal_id", data.terminal_id)
+      .maybeSingle();
+    if (!terminal) throw new Error("Terminal not found for this merchant");
+
+    const env = readEnv();
+    const credentials = await loadCredentials(supabaseAdmin as never, env, terminal.id);
+    if (!credentials) throw new Error("Terminal credentials are missing");
+
+    const result = await callMra({
+      env,
+      path: MRA_PATHS.terminalBlockingMessage,
+      payload: {},
+      auth: { jwtToken: credentials.jwtToken, secretKey: credentials.secretKey },
+    });
+    await logMraCall(supabaseAdmin as never, {
+      tenantId: data.tenant_id,
+      terminalUid: terminal.id,
+      endpoint: MRA_PATHS.terminalBlockingMessage,
+      statusCode: result.httpStatus,
+      durationMs: result.durationMs,
+      ok: result.ok,
+      request: "{}",
+      response: result.raw || (result.error ?? ""),
+    });
+    if (!result.ok) throw new Error(summarizeErrors(result));
+
+    await supabaseAdmin
+      .from("terminals")
+      .update({
+        blocking_message: result.data ? JSON.stringify(result.data) : null,
+        last_error: null,
+      })
+      .eq("id", terminal.id);
+
+    await auditLog(supabaseAdmin as never, {
+      tenantId: data.tenant_id,
+      actorId: context.userId,
+      action: "terminal.blocking-message",
+      resourceType: "terminal",
+      resourceId: terminal.id,
+      metadata: { terminal_id: data.terminal_id },
+    });
+
+    return { data: result.data ?? {} };
+  });
+
+/* --------------------------------------------- catalogue operations (ops) */
+
+const mapProductInput = z.object({
+  tenant_id: z.string().uuid(),
+  local_sku: z.string().trim().min(1).max(80),
+  mra_product_id: z.string().trim().min(1).max(80),
+  description: z.string().trim().max(240).optional(),
+  tax_category: z.string().trim().max(10).optional(),
+});
+
+/**
+ * Manually map a local SKU to an MRA product ID (unblocks sales for that SKU).
+ * Mirrors the rows written by POST /api/public/v1/inventory/sync.
+ */
+export const mapProduct = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => mapProductInput.parse(input))
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { auditLog } = await import("@/lib/mra/http.server");
+
+    const row: {
+      tenant_id: string;
+      local_sku: string;
+      mra_product_id: string;
+      description: string | null;
+      product_type: string;
+      auto_registered: boolean;
+      tax_category?: string;
+    } = {
+      tenant_id: data.tenant_id,
+      local_sku: data.local_sku,
+      mra_product_id: data.mra_product_id,
+      description: data.description ?? null,
+      product_type: "product",
+      auto_registered: false,
+    };
+    if (data.tax_category) row["tax_category"] = data.tax_category;
+
+    const { error } = await supabaseAdmin
+      .from("product_maps")
+      .upsert(row, { onConflict: "tenant_id,local_sku" });
+    if (error) throw new Error(error.message);
+
+    await auditLog(supabaseAdmin as never, {
+      tenantId: data.tenant_id,
+      actorId: context.userId,
+      action: "product.map",
+      resourceType: "product_map",
+      metadata: {
+        local_sku: data.local_sku,
+        mra_product_id: data.mra_product_id,
+      },
+    });
+
+    return { mapped: true };
+  });

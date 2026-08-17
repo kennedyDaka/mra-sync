@@ -124,7 +124,7 @@ export async function handleInitialInventoryUpload(request: Request): Promise<Re
     env,
     path: MRA_PATHS.initialInventoryUpload,
     payload,
-    auth: { jwtToken: credentials.jwtToken },
+    auth: { jwtToken: credentials.jwtToken, secretKey: credentials.secretKey },
   });
 
   await logMraCall(db, {
@@ -199,7 +199,7 @@ export async function handleStockAdjustment(request: Request): Promise<Response>
     env,
     path: MRA_PATHS.submitAdjustment,
     payload,
-    auth: { jwtToken: credentials.jwtToken },
+    auth: { jwtToken: credentials.jwtToken, secretKey: credentials.secretKey },
   });
 
   await logMraCall(db, {
@@ -238,7 +238,7 @@ export async function handleGetAdjustmentReasons(request: Request): Promise<Resp
     env,
     path: MRA_PATHS.getStockAdjustmentReasons,
     payload: {},
-    auth: { jwtToken: credentials.jwtToken },
+    auth: { jwtToken: credentials.jwtToken, secretKey: credentials.secretKey },
   });
 
   if (!result2.ok) {
@@ -308,7 +308,7 @@ export async function handleTransferInventory(request: Request): Promise<Respons
     env,
     path: MRA_PATHS.transferInventory,
     payload,
-    auth: { jwtToken: credentials.jwtToken },
+    auth: { jwtToken: credentials.jwtToken, secretKey: credentials.secretKey },
   });
 
   await logMraCall(db, {
@@ -405,7 +405,7 @@ export async function handleRawMaterialConversion(request: Request): Promise<Res
     env,
     path: MRA_PATHS.submitConversion,
     payload,
-    auth: { jwtToken: credentials.jwtToken },
+    auth: { jwtToken: credentials.jwtToken, secretKey: credentials.secretKey },
   });
 
   await logMraCall(db, {
@@ -478,7 +478,7 @@ export async function handleAddProduct(request: Request): Promise<Response> {
     env,
     path: MRA_PATHS.addProduct,
     payload,
-    auth: { jwtToken: credentials.jwtToken },
+    auth: { jwtToken: credentials.jwtToken, secretKey: credentials.secretKey },
   });
 
   await logMraCall(db, {
@@ -518,7 +518,7 @@ export async function handleGetHsCodes(request: Request): Promise<Response> {
     path: MRA_PATHS.getHsCodes,
     payload: {},
     method: "GET",
-    auth: { jwtToken: credentials.jwtToken },
+    auth: { jwtToken: credentials.jwtToken, secretKey: credentials.secretKey },
   });
 
   if (!result2.ok) {
@@ -546,7 +546,7 @@ export async function handleGetSuppliers(request: Request): Promise<Response> {
     env,
     path: MRA_PATHS.getSuppliers,
     payload: {},
-    auth: { jwtToken: credentials.jwtToken },
+    auth: { jwtToken: credentials.jwtToken, secretKey: credentials.secretKey },
   });
 
   if (!result2.ok) {
@@ -575,7 +575,7 @@ export async function handleWarehouseInventory(request: Request): Promise<Respon
     path: MRA_PATHS.warehouseInventory,
     payload: {},
     method: "GET",
-    auth: { jwtToken: credentials.jwtToken },
+    auth: { jwtToken: credentials.jwtToken, secretKey: credentials.secretKey },
   });
 
   if (!result2.ok) {
@@ -683,7 +683,7 @@ export async function handleCreditDebitNote(request: Request): Promise<Response>
     env,
     path: MRA_PATHS.processCreditDebitNote,
     payload,
-    auth: { jwtToken: credentials.jwtToken },
+    auth: { jwtToken: credentials.jwtToken, secretKey: credentials.secretKey },
   });
 
   await logMraCall(db, {
@@ -740,7 +740,7 @@ export async function handleGetInvoiceByNumber(request: Request): Promise<Respon
     env,
     path: MRA_PATHS.getInvoiceByNumber,
     payload: { invoiceNumber: parsed.data.invoice_number },
-    auth: { jwtToken: credentials.jwtToken },
+    auth: { jwtToken: credentials.jwtToken, secretKey: credentials.secretKey },
   });
 
   await logMraCall(db, {
@@ -797,7 +797,7 @@ export async function handleProductStatus(request: Request): Promise<Response> {
     env,
     path: MRA_PATHS.productStatus,
     payload: { barcode: parsed.data.barcode },
-    auth: { jwtToken: credentials.jwtToken },
+    auth: { jwtToken: credentials.jwtToken, secretKey: credentials.secretKey },
   });
 
   if (!result2.ok) {
