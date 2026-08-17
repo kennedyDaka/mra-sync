@@ -546,3 +546,140 @@ export const mapProduct = createServerFn({ method: "POST" })
 
     return { mapped: true };
   });
+
+/* ------------------------------------------------------------ API tokens */
+
+const tokenIdInput = z.object({ tenant_id: z.string().uuid(), token_id: z.string().uuid() });
+
+async function requireOwnedTenant(
+  supabase: import("@supabase/supabase-js").SupabaseClient,
+  tenantId: string,
+) {
+  const { data: owned } = await supabase
+    .from("tenants")
+    .select("id")
+    .eq("id", tenantId)
+    .maybeSingle();
+  if (!owned) throw new Error("Merchant not found");
+}
+
+export const listTenantTokens = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ tenant_id: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    await requireOwnedTenant(context.supabase, data.tenant_id);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: rows, error } = await supabaseAdmin
+      .from("api_tokens")
+      .select("id, label, token_prefix, revoked, expires_at, last_used_at, created_at, token_enc")
+      .eq("tenant_id", data.tenant_id)
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return (rows ?? []).map((r) => ({
+      id: r.id,
+      label: r.label ?? "",
+      prefix: r.token_prefix ?? "",
+      revoked: r.revoked ?? false,
+      expires_at: r.expires_at,
+      last_used_at: r.last_used_at,
+      created_at: r.created_at,
+      revealable: Boolean(r.token_enc),
+    }));
+  });
+
+export const revealTenantToken = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => tokenIdInput.parse(input))
+  .handler(async ({ data, context }) => {
+    await requireOwnedTenant(context.supabase, data.tenant_id);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { readEnv } = await import("@/lib/mra/env.server");
+    const { openSecret } = await import("@/lib/mra/crypto.server");
+
+    const { data: row } = await supabaseAdmin
+      .from("api_tokens")
+      .select("token_enc, revoked")
+      .eq("id", data.token_id)
+      .eq("tenant_id", data.tenant_id)
+      .maybeSingle();
+    if (!row) throw new Error("API token not found");
+    if (row.revoked) throw new Error("API token is revoked");
+    if (!row.token_enc) throw new Error("Raw value was not stored for this token");
+
+    const env = readEnv();
+    const token = await openSecret(row.token_enc, env.masterKey);
+
+    const { auditLog } = await import("@/lib/mra/http.server");
+    await auditLog(supabaseAdmin as never, {
+      tenantId: data.tenant_id,
+      actorId: context.userId,
+      action: "token.reveal",
+      resourceType: "api_token",
+      resourceId: data.token_id,
+      metadata: {},
+    });
+    return { token };
+  });
+
+export const revokeTenantToken = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => tokenIdInput.parse(input))
+  .handler(async ({ data, context }) => {
+    await requireOwnedTenant(context.supabase, data.tenant_id);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
+      .from("api_tokens")
+      .update({ revoked: true })
+      .eq("id", data.token_id)
+      .eq("tenant_id", data.tenant_id);
+    if (error) throw new Error(error.message);
+
+    const { auditLog } = await import("@/lib/mra/http.server");
+    await auditLog(supabaseAdmin as never, {
+      tenantId: data.tenant_id,
+      actorId: context.userId,
+      action: "token.revoke",
+      resourceType: "api_token",
+      resourceId: data.token_id,
+      metadata: {},
+    });
+    return { revoked: true };
+  });
+
+export const rotateTenantToken = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ tenant_id: z.string().uuid(), label: z.string().max(60).default("rotated") }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    await requireOwnedTenant(context.supabase, data.tenant_id);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { issueApiToken } = await import("@/lib/mra/handlers.server");
+
+    const token = await issueApiToken(supabaseAdmin as never, data.tenant_id, data.label);
+    // Rotation revokes every previously active token so only one is ever live.
+    const { sha256Hex } = await import("@/lib/mra/crypto.server");
+    const hash = await sha256Hex(token);
+    const { data: fresh } = await supabaseAdmin
+      .from("api_tokens")
+      .select("id")
+      .eq("token_hash", hash)
+      .maybeSingle();
+    if (!fresh) throw new Error("Failed to resolve the newly issued token");
+    await supabaseAdmin
+      .from("api_tokens")
+      .update({ revoked: true })
+      .eq("tenant_id", data.tenant_id)
+      .eq("revoked", false)
+      .neq("id", fresh.id);
+
+    const { auditLog } = await import("@/lib/mra/http.server");
+    await auditLog(supabaseAdmin as never, {
+      tenantId: data.tenant_id,
+      actorId: context.userId,
+      action: "token.rotate",
+      resourceType: "api_token",
+      metadata: { label: data.label },
+    });
+    return { token };
+  });

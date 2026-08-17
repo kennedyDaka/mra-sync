@@ -17,31 +17,37 @@ export type Database = {
       api_tokens: {
         Row: {
           created_at: string
+          expires_at: string | null
           id: string
           label: string
           last_used_at: string | null
           revoked: boolean
           tenant_id: string
+          token_enc: string | null
           token_hash: string
           token_prefix: string
         }
         Insert: {
           created_at?: string
+          expires_at?: string | null
           id?: string
           label?: string
           last_used_at?: string | null
           revoked?: boolean
           tenant_id: string
+          token_enc?: string | null
           token_hash: string
           token_prefix: string
         }
         Update: {
           created_at?: string
+          expires_at?: string | null
           id?: string
           label?: string
           last_used_at?: string | null
           revoked?: boolean
           tenant_id?: string
+          token_enc?: string | null
           token_hash?: string
           token_prefix?: string
         }

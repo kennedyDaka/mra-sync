@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Copy, LogOut, RefreshCcw, RotateCw, ShieldAlert, Info, CheckCircle2 } from "lucide-react";
+import { Copy, LogOut, RefreshCcw, RotateCw, ShieldAlert, Info, CheckCircle2, KeyRound, Ban, TerminalSquare } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,10 @@ import {
   confirmActivationRetry,
   getTerminalBlockingMessage,
   mapProduct,
+  listTenantTokens,
+  revealTenantToken,
+  revokeTenantToken,
+  rotateTenantToken,
 } from "@/lib/mra/admin.functions";
 
 export const Route = createFileRoute("/_authenticated/ops")({
@@ -171,6 +175,10 @@ function OpsConsole() {
   const confirmFn = useServerFn(confirmActivationRetry);
   const blockingFn = useServerFn(getTerminalBlockingMessage);
   const mapProductFn = useServerFn(mapProduct);
+  const listTokensFn = useServerFn(listTenantTokens);
+  const revealTokenFn = useServerFn(revealTenantToken);
+  const revokeTokenFn = useServerFn(revokeTenantToken);
+  const rotateTokenFn = useServerFn(rotateTenantToken);
 
   const createMerchant = useMutation({
     mutationFn: (input: { name: string; slug: string; taxpayer_tin?: string }) =>
@@ -188,7 +196,43 @@ function OpsConsole() {
     mutationFn: () => issueTokenFn({ data: { tenant_id: activeId!, label: "rotated" } }),
     onSuccess: (res) => {
       setFreshToken(res.token);
+      void qc.invalidateQueries({ queryKey: ["tokens", activeId] });
       toast.success("New API token issued");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const tokens = useQuery({
+    queryKey: ["tokens", activeId],
+    enabled: !!activeId,
+    queryFn: () => listTokensFn({ data: { tenant_id: activeId! } }),
+  });
+
+  const [revealed, setRevealed] = useState<Record<string, string>>({});
+  const reveal = useMutation({
+    mutationFn: (tokenId: string) => revealTokenFn({ data: { tenant_id: activeId!, token_id: tokenId } }),
+    onSuccess: (res, tokenId) => {
+      setRevealed((prev) => ({ ...prev, [tokenId]: res.token }));
+      void copy(res.token);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const revoke = useMutation({
+    mutationFn: (tokenId: string) => revokeTokenFn({ data: { tenant_id: activeId!, token_id: tokenId } }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["tokens", activeId] });
+      toast.success("API token revoked");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const rotate = useMutation({
+    mutationFn: () => rotateTokenFn({ data: { tenant_id: activeId! } }),
+    onSuccess: (res) => {
+      setFreshToken(res.token);
+      void qc.invalidateQueries({ queryKey: ["tokens", activeId] });
+      toast.success("Token rotated — previous tokens revoked");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -326,6 +370,7 @@ function OpsConsole() {
 
         <Tabs defaultValue="invoices">
           <TabsList>
+            <TabsTrigger value="connection">Connection</TabsTrigger>
             <TabsTrigger value="invoices">Invoices</TabsTrigger>
             <TabsTrigger value="queue">Queue</TabsTrigger>
             <TabsTrigger value="stores">Stores</TabsTrigger>
@@ -335,6 +380,109 @@ function OpsConsole() {
             <TabsTrigger value="logs">MRA logs</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="connection" className="mt-4 space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold">API keys</h2>
+                <p className="text-sm text-muted-foreground">
+                  Bearer tokens your POS or ERP uses to call the middleware. Only one token is
+                  typically needed — rotate to replace it.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" disabled={!activeId || newToken.isPending} onClick={() => newToken.mutate()}>
+                  <KeyRound className="size-4" /> Issue new
+                </Button>
+                <Button size="sm" disabled={!activeId || rotate.isPending} onClick={() => rotate.mutate()}>
+                  <RotateCw className="size-4" /> Rotate (revokes old)
+                </Button>
+              </div>
+            </div>
+
+            <div className="panel overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="mono-tag text-muted-foreground">
+                  <tr className="border-b border-border text-left">
+                    <th className="px-4 py-3">Label</th>
+                    <th className="px-4 py-3">Token</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Created</th>
+                    <th className="px-4 py-3">Expires</th>
+                    <th className="px-4 py-3">Last used</th>
+                    <th className="px-4 py-3 text-right"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(tokens.data ?? []).map((t) => {
+                    const full = revealed[t.id];
+                    const expired = t.expires_at && new Date(t.expires_at) < new Date();
+                    return (
+                      <tr key={t.id} className="border-b border-border/60 last:border-0">
+                        <td className="px-4 py-3 font-medium">{t.label || "default"}</td>
+                        <td className="px-4 py-3">
+                          {full ? (
+                            <code className="mono-tag block max-w-72 truncate rounded bg-secondary px-2 py-1 text-xs">
+                              {full}
+                            </code>
+                          ) : (
+                            <code className="mono-tag rounded bg-secondary/60 px-2 py-1 text-xs text-muted-foreground">
+                              {t.prefix}…{t.revealable ? "" : " (raw not stored)"}
+                            </code>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <StatusPill value={t.revoked ? "REVOKED" : expired ? "EXPIRED" : "ACTIVE"} />
+                        </td>
+                        <td className="mono-tag px-4 py-3 text-muted-foreground">
+                          {new Date(t.created_at as string).toLocaleDateString()}
+                        </td>
+                        <td className="mono-tag px-4 py-3 text-muted-foreground">
+                          {t.expires_at ? new Date(t.expires_at as string).toLocaleDateString() : "never"}
+                        </td>
+                        <td className="mono-tag px-4 py-3 text-muted-foreground">
+                          {t.last_used_at ? new Date(t.last_used_at as string).toLocaleString() : "never"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-2">
+                            {t.revealable && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={t.revoked || reveal.isPending}
+                                onClick={() => reveal.mutate(t.id)}
+                              >
+                                <Copy className="size-3.5" /> Copy
+                              </Button>
+                            )}
+                            {!t.revoked && !expired && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={revoke.isPending}
+                                onClick={() => revoke.mutate(t.id)}
+                              >
+                                <Ban className="size-3.5" /> Revoke
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {(tokens.data ?? []).length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
+                        No API tokens for this merchant yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <ConnectionGuide />
+          </TabsContent>
 
           <TabsContent value="invoices" className="mt-4">
             <div className="panel overflow-x-auto">
@@ -706,6 +854,124 @@ Authorization: Bearer <api-token>
   "terminal_id": "TILL-01",
   "tac": "<activation code>"
 }`}</pre>
+    </div>
+  );
+}
+
+const CONNECTOR_CAPABILITIES: Array<{
+  type: string;
+  name: string;
+  sales: boolean;
+  inventory: boolean;
+  push: boolean;
+  note: string;
+}> = [
+  { type: "odoo", name: "Odoo ERP", sales: true, inventory: true, push: true, note: "Full connector — JSON-RPC" },
+  { type: "generic-rest", name: "Generic REST API", sales: true, inventory: true, push: true, note: "Any REST ERP" },
+  { type: "generic-webhook", name: "Custom Webhook (Push)", sales: false, inventory: false, push: true, note: "ERP receives invoices via webhook" },
+  { type: "aronium", name: "Aronium POS", sales: true, inventory: true, push: false, note: "Native payloads" },
+  { type: "cliqpos", name: "CliqPOS", sales: true, inventory: true, push: false, note: "Native payloads" },
+  { type: "erpnext", name: "ERPNext", sales: true, inventory: true, push: false, note: "Native payloads" },
+  { type: "kiboerp", name: "Kibo ERP", sales: true, inventory: true, push: false, note: "Native payloads" },
+  { type: "sap-b1", name: "SAP Business One", sales: true, inventory: true, push: false, note: "Native payloads" },
+  { type: "tally", name: "Tally ERP 9", sales: true, inventory: true, push: false, note: "Native payloads" },
+  { type: "sage", name: "Sage (Pastel / Evolution)", sales: false, inventory: true, push: false, note: "Inventory CSV only — sales not supported" },
+];
+
+function CapabilityMark({ ok }: { ok: boolean }) {
+  return ok ? (
+    <CheckCircle2 className="size-4 text-success" />
+  ) : (
+    <span className="text-muted-foreground">—</span>
+  );
+}
+
+function ConnectionGuide() {
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <div className="panel p-5">
+        <h2 className="text-base font-semibold">Connect your POS or ERP in 3 steps</h2>
+        <ol className="mt-3 space-y-3 text-sm text-muted-foreground">
+          <li className="flex gap-3">
+            <span className="mono-tag flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-semibold text-primary">1</span>
+            <span>
+              <strong className="text-foreground">Activate a terminal</strong> — the POS calls{" "}
+              <code className="mono-tag rounded bg-secondary/60 px-1">POST /api/public/v1/tenant/activate</code> with its
+              Terminal Activation Code (TAC). Until a terminal is active, sales cannot be submitted.
+            </span>
+          </li>
+          <li className="flex gap-3">
+            <span className="mono-tag flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-semibold text-primary">2</span>
+            <span>
+              <strong className="text-foreground">Copy your API token</strong> from the table above and put it in your POS
+              as <code className="mono-tag rounded bg-secondary/60 px-1">Authorization: Bearer &lt;token&gt;</code>. The token
+              identifies your merchant — it never touches MRA itself.
+            </span>
+          </li>
+          <li className="flex gap-3">
+            <span className="mono-tag flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-semibold text-primary">3</span>
+            <span>
+              <strong className="text-foreground">Send inventory, then sales</strong> — push products first (auto-registers
+              them with MRA), then submit receipts. Each sale returns <code className="mono-tag rounded bg-secondary/60 px-1">SUBMITTED</code>{" "}
+              with an MRA receipt number.
+            </span>
+          </li>
+        </ol>
+        <pre className="mono-tag mt-4 overflow-auto rounded bg-secondary/60 p-3 text-xs">{`# 1) Register your products (SKUs appear in the Catalogue)
+curl -X POST https://<host>/api/public/v1/ingest/inventory \\
+  -H "Authorization: Bearer <api-token>" \\
+  -H "Content-Type: application/json" \\
+  -d '{"products":[{"sku":"SKU-001","name":"Widget","price":2500,"stock":10}]}'
+
+# 2) Submit a sale — every receipt goes to MRA EIS
+curl -X POST https://<host>/api/public/v1/ingest/sales \\
+  -H "Authorization: Bearer <api-token>" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "receipt_number": "R-0001",
+    "payment_method": "Cash",
+    "items": [{"erp_sku":"SKU-001","description":"Widget","quantity":1,"unit_price":2500}]
+  }'
+
+# -> {"status":"SUBMITTED","mra_receipt_number":"Cve-XXX-XXX-X", ...}`}</pre>
+        <div className="mt-4 space-y-1 text-xs text-muted-foreground">
+          <p className="font-medium text-foreground">Common failures</p>
+          <p>• <strong>Unknown SKU</strong> — product not in the catalogue yet: push inventory first.</p>
+          <p>• <strong>Terminal inactive</strong> — no active terminal: activate it (step 1).</p>
+          <p>• <strong>401 unauthorized</strong> — token revoked or expired: issue a new one above.</p>
+        </div>
+      </div>
+
+      <div className="panel p-5">
+        <h2 className="text-base font-semibold">Built-in connectors</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Use the native endpoint{" "}
+          <code className="mono-tag rounded bg-secondary/60 px-1">/api/public/v1/ingest/&lt;source&gt;/sales</code> to send
+          each system&apos;s own payload format. Sage receives inventory CSV only.
+        </p>
+        <table className="mt-3 w-full text-sm">
+          <thead className="mono-tag text-muted-foreground">
+            <tr className="border-b border-border text-left">
+              <th className="py-2 pr-2">Connector</th>
+              <th className="px-2 py-2">Sales</th>
+              <th className="px-2 py-2">Inventory</th>
+              <th className="px-2 py-2">ERP push</th>
+              <th className="py-2 pl-2 text-right"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {CONNECTOR_CAPABILITIES.map((c) => (
+              <tr key={c.type} className="border-b border-border/60 last:border-0">
+                <td className="py-2 pr-2 font-medium">{c.name}</td>
+                <td className="px-2 py-2"><CapabilityMark ok={c.sales} /></td>
+                <td className="px-2 py-2"><CapabilityMark ok={c.inventory} /></td>
+                <td className="px-2 py-2"><CapabilityMark ok={c.push} /></td>
+                <td className="py-2 pl-2 text-right text-xs text-muted-foreground">{c.note}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

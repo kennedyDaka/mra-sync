@@ -1317,9 +1317,19 @@ export async function issueApiToken(
 ) {
   const { token, hash, prefix } = await mintApiToken();
   const expiresAt = new Date(Date.now() + expiresInDays * 86400_000).toISOString();
+  // Always seal (even in dev) so the raw value can be re-shown by admins later.
+  const env = readEnv();
+  const sealed = await sealSecret(token, env.masterKey, true);
   const { error } = await db
     .from("api_tokens")
-    .insert({ tenant_id: tenantId, label, token_hash: hash, token_prefix: prefix, expires_at: expiresAt });
+    .insert({
+      tenant_id: tenantId,
+      label,
+      token_hash: hash,
+      token_prefix: prefix,
+      token_enc: sealed,
+      expires_at: expiresAt,
+    });
   if (error) throw new Error(error.message);
   return token;
 }

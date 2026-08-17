@@ -122,6 +122,45 @@ Ingest endpoints authenticate with `Authorization: Bearer <api_token>` **or** we
 body using the connector's webhook secret). Terminal resolution: `X-Terminal-ID` header →
 connector `default_terminal_id` → tenant's first active terminal.
 
+### Connecting a POS or ERP
+
+1. **Activate a terminal** — the POS posts its Terminal Activation Code (TAC) to
+   `POST /api/public/v1/tenant/activate`. Sales can only be submitted once a terminal is active.
+2. **Copy the API token** — issue one in the ops console (**Connection** tab); tokens are stored
+   SHA-256 hashed with an optional master-key sealed copy so operators can re-copy them. Rotation
+   revokes all previous tokens.
+3. **Send inventory, then sales** — products are auto-registered with MRA on the first inventory
+   push; unmapped SKUs are rejected with a 400 listing them.
+
+```bash
+curl -X POST https://<host>/api/public/v1/ingest/inventory \
+  -H "Authorization: Bearer <api-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"products":[{"sku":"SKU-001","name":"Widget","price":2500,"stock":10}]}'
+
+curl -X POST https://<host>/api/public/v1/ingest/sales \
+  -H "Authorization: Bearer <api-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"receipt_number":"R-0001","payment_method":"Cash",
+       "items":[{"erp_sku":"SKU-001","description":"Widget","quantity":1,"unit_price":2500}]}'
+# -> {"status":"SUBMITTED","mra_receipt_number":"Cve-XXX-XXX-X", ...}
+```
+
+Connector capability summary (native endpoints at `/api/public/v1/ingest/{source}/...`):
+
+| Connector | Sales | Inventory | ERP push | Notes |
+|---|---|---|---|---|
+| Odoo ERP | ✅ | ✅ | ✅ | JSON-RPC; also `listProducts`/`submitInvoice`/`getStockLevels` |
+| Generic REST | ✅ | ✅ | ✅ | Any REST ERP via `base_url` + endpoints |
+| Custom Webhook | — | — | ✅ | Receives invoices via `callback_url` with HMAC signature |
+| Aronium POS | ✅ | ✅ | — | Native payloads |
+| CliqPOS | ✅ | ✅ | — | Native payloads |
+| ERPNext | ✅ | ✅ | — | Native payloads |
+| Kibo ERP | ✅ | ✅ | — | Native payloads |
+| SAP Business One | ✅ | ✅ | — | Native payloads |
+| Tally ERP 9 | ✅ | ✅ | — | Native payloads |
+| Sage (Pastel/Evolution) | — | ✅ | — | Inventory CSV only; sales rejected (`source_not_ingestible`) |
+
 ### Billing
 | Method | Path | Description |
 |---|---|---|
@@ -140,7 +179,7 @@ All API endpoints (except `/health`) require:
 | `stores` | Multiple stores per tenant |
 | `terminals` | POS terminal registration & MRA config |
 | `terminal_secrets` | Encrypted JWT + secret keys |
-| `api_tokens` | Hashed bearer tokens |
+| `api_tokens` | Hashed bearer tokens (+ optional sealed copy for admin re-copy) |
 | `product_maps` | SKU → MRA product mappings |
 | `invoices` | Invoice records with MRA status |
 | `sync_queue` | FIFO queue for offline catch-up |

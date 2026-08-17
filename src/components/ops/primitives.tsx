@@ -9,6 +9,9 @@ const TONE: Record<string, string> = {
   active: "bg-success/15 text-success border-success/30",
   pending: "bg-warning/15 text-warning border-warning/30",
   error: "bg-destructive/15 text-destructive border-destructive/30",
+  ACTIVE: "bg-success/15 text-success border-success/30",
+  REVOKED: "bg-destructive/15 text-destructive border-destructive/30",
+  EXPIRED: "bg-warning/15 text-warning border-warning/30",
 };
 
 export function StatusPill({ value }: { value: string | null | undefined }) {
