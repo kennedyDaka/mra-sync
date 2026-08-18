@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as DocsRouteImport } from './routes/docs'
 import { Route as AuthenticatedOpsRouteImport } from './routes/_authenticated/ops'
 import { Route as ApiCronSyncWorkerRouteImport } from './routes/api/cron/sync-worker'
 import { Route as ApiOpsV1BillingRouteImport } from './routes/api/ops/v1/billing'
@@ -25,6 +26,7 @@ import { Route as ApiPublicV1PingRouteImport } from './routes/api/public/v1/ping
 import { Route as ApiPublicV1RecipeRouteImport } from './routes/api/public/v1/recipe'
 import { Route as ApiPublicV1RecipesRouteImport } from './routes/api/public/v1/recipes'
 import { Route as ApiPublicV1SalesRouteImport } from './routes/api/public/v1/sales'
+import { Route as ApiPublicV1TerminalsRouteImport } from './routes/api/public/v1/terminals'
 import { Route as ApiPublicV1IngestInventoryRouteImport } from './routes/api/public/v1/ingest/inventory'
 import { Route as ApiPublicV1IngestSalesRouteImport } from './routes/api/public/v1/ingest/sales'
 import { Route as ApiPublicV1InventoryAdjustmentRouteImport } from './routes/api/public/v1/inventory/adjustment'
@@ -70,6 +72,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocsRoute = DocsRouteImport.update({
+  id: '/docs',
+  path: '/docs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedOpsRoute = AuthenticatedOpsRouteImport.update({
@@ -137,6 +144,11 @@ const ApiPublicV1RecipesRoute = ApiPublicV1RecipesRouteImport.update({
 const ApiPublicV1SalesRoute = ApiPublicV1SalesRouteImport.update({
   id: '/api/public/v1/sales',
   path: '/api/public/v1/sales',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicV1TerminalsRoute = ApiPublicV1TerminalsRouteImport.update({
+  id: '/api/public/v1/terminals',
+  path: '/api/public/v1/terminals',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicV1IngestInventoryRoute =
@@ -333,6 +345,7 @@ const ApiPublicV1IngestSourceSalesRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/docs': typeof DocsRoute
   '/ops': typeof AuthenticatedOpsRoute
   '/api/cron/sync-worker': typeof ApiCronSyncWorkerRoute
   '/api/ops/v1/billing': typeof ApiOpsV1BillingRoute
@@ -346,6 +359,7 @@ export interface FileRoutesByFullPath {
   '/api/public/v1/recipe': typeof ApiPublicV1RecipeRoute
   '/api/public/v1/recipes': typeof ApiPublicV1RecipesRouteWithChildren
   '/api/public/v1/sales': typeof ApiPublicV1SalesRouteWithChildren
+  '/api/public/v1/terminals': typeof ApiPublicV1TerminalsRoute
   '/api/public/v1/ingest/inventory': typeof ApiPublicV1IngestInventoryRoute
   '/api/public/v1/ingest/sales': typeof ApiPublicV1IngestSalesRoute
   '/api/public/v1/inventory/adjustment': typeof ApiPublicV1InventoryAdjustmentRoute
@@ -382,6 +396,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/docs': typeof DocsRoute
   '/ops': typeof AuthenticatedOpsRoute
   '/api/cron/sync-worker': typeof ApiCronSyncWorkerRoute
   '/api/ops/v1/billing': typeof ApiOpsV1BillingRoute
@@ -395,6 +410,7 @@ export interface FileRoutesByTo {
   '/api/public/v1/recipe': typeof ApiPublicV1RecipeRoute
   '/api/public/v1/recipes': typeof ApiPublicV1RecipesRouteWithChildren
   '/api/public/v1/sales': typeof ApiPublicV1SalesRouteWithChildren
+  '/api/public/v1/terminals': typeof ApiPublicV1TerminalsRoute
   '/api/public/v1/ingest/inventory': typeof ApiPublicV1IngestInventoryRoute
   '/api/public/v1/ingest/sales': typeof ApiPublicV1IngestSalesRoute
   '/api/public/v1/inventory/adjustment': typeof ApiPublicV1InventoryAdjustmentRoute
@@ -433,6 +449,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/docs': typeof DocsRoute
   '/_authenticated/ops': typeof AuthenticatedOpsRoute
   '/api/cron/sync-worker': typeof ApiCronSyncWorkerRoute
   '/api/ops/v1/billing': typeof ApiOpsV1BillingRoute
@@ -446,6 +463,7 @@ export interface FileRoutesById {
   '/api/public/v1/recipe': typeof ApiPublicV1RecipeRoute
   '/api/public/v1/recipes': typeof ApiPublicV1RecipesRouteWithChildren
   '/api/public/v1/sales': typeof ApiPublicV1SalesRouteWithChildren
+  '/api/public/v1/terminals': typeof ApiPublicV1TerminalsRoute
   '/api/public/v1/ingest/inventory': typeof ApiPublicV1IngestInventoryRoute
   '/api/public/v1/ingest/sales': typeof ApiPublicV1IngestSalesRoute
   '/api/public/v1/inventory/adjustment': typeof ApiPublicV1InventoryAdjustmentRoute
@@ -484,6 +502,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/docs'
     | '/ops'
     | '/api/cron/sync-worker'
     | '/api/ops/v1/billing'
@@ -497,6 +516,7 @@ export interface FileRouteTypes {
     | '/api/public/v1/recipe'
     | '/api/public/v1/recipes'
     | '/api/public/v1/sales'
+    | '/api/public/v1/terminals'
     | '/api/public/v1/ingest/inventory'
     | '/api/public/v1/ingest/sales'
     | '/api/public/v1/inventory/adjustment'
@@ -533,6 +553,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/docs'
     | '/ops'
     | '/api/cron/sync-worker'
     | '/api/ops/v1/billing'
@@ -546,6 +567,7 @@ export interface FileRouteTypes {
     | '/api/public/v1/recipe'
     | '/api/public/v1/recipes'
     | '/api/public/v1/sales'
+    | '/api/public/v1/terminals'
     | '/api/public/v1/ingest/inventory'
     | '/api/public/v1/ingest/sales'
     | '/api/public/v1/inventory/adjustment'
@@ -583,6 +605,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/docs'
     | '/_authenticated/ops'
     | '/api/cron/sync-worker'
     | '/api/ops/v1/billing'
@@ -596,6 +619,7 @@ export interface FileRouteTypes {
     | '/api/public/v1/recipe'
     | '/api/public/v1/recipes'
     | '/api/public/v1/sales'
+    | '/api/public/v1/terminals'
     | '/api/public/v1/ingest/inventory'
     | '/api/public/v1/ingest/sales'
     | '/api/public/v1/inventory/adjustment'
@@ -634,6 +658,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  DocsRoute: typeof DocsRoute
   ApiCronSyncWorkerRoute: typeof ApiCronSyncWorkerRoute
   ApiOpsV1BillingRoute: typeof ApiOpsV1BillingRoute
   ApiOpsV1ConnectorsRoute: typeof ApiOpsV1ConnectorsRoute
@@ -646,6 +671,7 @@ export interface RootRouteChildren {
   ApiPublicV1RecipeRoute: typeof ApiPublicV1RecipeRoute
   ApiPublicV1RecipesRoute: typeof ApiPublicV1RecipesRouteWithChildren
   ApiPublicV1SalesRoute: typeof ApiPublicV1SalesRouteWithChildren
+  ApiPublicV1TerminalsRoute: typeof ApiPublicV1TerminalsRoute
   ApiPublicV1IngestInventoryRoute: typeof ApiPublicV1IngestInventoryRoute
   ApiPublicV1IngestSalesRoute: typeof ApiPublicV1IngestSalesRoute
   ApiPublicV1InventoryAdjustmentRoute: typeof ApiPublicV1InventoryAdjustmentRoute
@@ -694,6 +720,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/docs': {
+      id: '/docs'
+      path: '/docs'
+      fullPath: '/docs'
+      preLoaderRoute: typeof DocsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/ops': {
@@ -785,6 +818,13 @@ declare module '@tanstack/react-router' {
       path: '/api/public/v1/sales'
       fullPath: '/api/public/v1/sales'
       preLoaderRoute: typeof ApiPublicV1SalesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/v1/terminals': {
+      id: '/api/public/v1/terminals'
+      path: '/api/public/v1/terminals'
+      fullPath: '/api/public/v1/terminals'
+      preLoaderRoute: typeof ApiPublicV1TerminalsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/v1/ingest/inventory': {
@@ -1063,6 +1103,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  DocsRoute: DocsRoute,
   ApiCronSyncWorkerRoute: ApiCronSyncWorkerRoute,
   ApiOpsV1BillingRoute: ApiOpsV1BillingRoute,
   ApiOpsV1ConnectorsRoute: ApiOpsV1ConnectorsRoute,
@@ -1075,6 +1116,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicV1RecipeRoute: ApiPublicV1RecipeRoute,
   ApiPublicV1RecipesRoute: ApiPublicV1RecipesRouteWithChildren,
   ApiPublicV1SalesRoute: ApiPublicV1SalesRouteWithChildren,
+  ApiPublicV1TerminalsRoute: ApiPublicV1TerminalsRoute,
   ApiPublicV1IngestInventoryRoute: ApiPublicV1IngestInventoryRoute,
   ApiPublicV1IngestSalesRoute: ApiPublicV1IngestSalesRoute,
   ApiPublicV1InventoryAdjustmentRoute: ApiPublicV1InventoryAdjustmentRoute,

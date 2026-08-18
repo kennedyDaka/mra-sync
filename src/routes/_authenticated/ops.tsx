@@ -921,16 +921,16 @@ function ConnectionGuide() {
 curl -X POST https://<host>/api/public/v1/ingest/inventory \\
   -H "Authorization: Bearer <api-token>" \\
   -H "Content-Type: application/json" \\
-  -d '{"products":[{"sku":"SKU-001","name":"Widget","price":2500,"stock":10}]}'
+  -d '{"items":[{"local_sku":"SKU-001","description":"Widget","quantity_on_hand":10}]}'
 
 # 2) Submit a sale — every receipt goes to MRA EIS
 curl -X POST https://<host>/api/public/v1/ingest/sales \\
   -H "Authorization: Bearer <api-token>" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "receipt_number": "R-0001",
+    "erp_invoice_number": "R-0001",
     "payment_method": "Cash",
-    "items": [{"erp_sku":"SKU-001","description":"Widget","quantity":1,"unit_price":2500}]
+    "line_items": [{"erp_sku":"SKU-001","description":"Widget","quantity":1,"unit_price":2500}]
   }'
 
 # -> {"status":"SUBMITTED","mra_receipt_number":"Cve-XXX-XXX-X", ...}`}</pre>

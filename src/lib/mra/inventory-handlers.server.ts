@@ -430,6 +430,8 @@ export async function handleRawMaterialConversion(request: Request): Promise<Res
 
 const addProductSchema = z.object({
   barcode: z.string().min(4).max(120).optional(),
+  /** Local SKU used for invoice matching. Falls back to `barcode` then the MRA product code. */
+  local_sku: z.string().min(1).max(120).optional(),
   hs_code: z.string().min(1).max(40),
   name: z.string().min(1).max(200),
   description: z.string().min(1).max(500),
@@ -496,7 +498,38 @@ export async function handleAddProduct(request: Request): Promise<Response> {
     return errorResponse(502, "mra_rejection", summarizeErrors(result2), result2.errors);
   }
 
-  return json({ status: "registered", mra_data: result2.data });
+  // One-call registration: mirror the new product into product_maps so sales
+  // can reference it immediately without a separate mapping step.
+  const mraData = result2.data as Record<string, unknown>;
+  const productCode = String(mraData["productCode"] ?? mraData["productId"] ?? "");
+  const localSku = parsed.data.local_sku?.trim() || parsed.data.barcode?.trim() || productCode;
+  if (localSku && productCode) {
+    try {
+      await db
+        .from("product_maps")
+        .upsert(
+          {
+            tenant_id: ctx.tenantId,
+            local_sku: localSku,
+            mra_product_id: productCode,
+            description: parsed.data.name,
+            product_type: "product",
+            auto_registered: false,
+          },
+          { onConflict: "tenant_id,local_sku" },
+        );
+    } catch {
+      // mapping failure must not fail the registration itself
+    }
+  }
+
+  return json({
+    status: "registered",
+    local_sku: localSku,
+    mra_product_id: productCode,
+    mapped: Boolean(localSku && productCode),
+    mra_data: result2.data,
+  });
 }
 
 /* -------------------------------------------------- get HS codes */

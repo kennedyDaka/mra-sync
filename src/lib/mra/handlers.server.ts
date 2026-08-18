@@ -424,6 +424,19 @@ export async function handleSales(
       .from("terminals")
       .update({ offline_accumulated: terminal.offline_accumulated + built.invoiceTotal })
       .eq("id", terminal.id);
+    const { notifyInvoiceStatus } = await import("./status-webhooks.server");
+    void notifyInvoiceStatus(db, ctx.tenantId, {
+      event: "invoice.status_changed",
+      data: {
+        id: invoice["id"],
+        erp_invoice_number: input.erp_invoice_number,
+        status: "QUEUED",
+        grand_total: built.invoiceTotal,
+        terminal_id: terminalKey,
+        last_error: reason,
+        occurred_at: new Date().toISOString(),
+      },
+    });
     return json({ ...receiptFor({ ...invoice, status: "QUEUED" }), queued: true, reason }, 202);
   };
 
@@ -516,6 +529,20 @@ export async function handleSales(
       console.error("[sales] ERP push failed:", err.message),
     );
 
+    const { notifyInvoiceStatus } = await import("./status-webhooks.server");
+    void notifyInvoiceStatus(db, ctx.tenantId, {
+      event: "invoice.status_changed",
+      data: {
+        id: invoice["id"],
+        erp_invoice_number: input.erp_invoice_number,
+        status: "SUBMITTED",
+        mra_invoice_id: invoiceNumber,
+        grand_total: built.invoiceTotal,
+        terminal_id: terminalKey,
+        occurred_at: new Date().toISOString(),
+      },
+    });
+
     return json(receiptFor(updated ?? invoice), 200);
   }
 
@@ -529,6 +556,19 @@ export async function handleSales(
         last_error: outcome.error,
       })
       .eq("id", invoice["id"]);
+    const { notifyInvoiceStatus } = await import("./status-webhooks.server");
+    void notifyInvoiceStatus(db, ctx.tenantId, {
+      event: "invoice.status_changed",
+      data: {
+        id: invoice["id"],
+        erp_invoice_number: input.erp_invoice_number,
+        status: "REJECTED",
+        grand_total: built.invoiceTotal,
+        terminal_id: terminalKey,
+        last_error: outcome.error,
+        occurred_at: new Date().toISOString(),
+      },
+    });
     return errorResponse(422, "mra_rejected", outcome.error ?? "MRA rejected the invoice", {
       mra_status_code: outcome.statusCode,
       mra_http_status: outcome.httpStatus,
@@ -1046,7 +1086,7 @@ export async function handleQueueWorker(): Promise<Response> {
     try {
     const { data: invoice } = await db
       .from("invoices")
-      .select("id, tenant_id, terminal_uid, mra_payload, mra_invoice_number, grand_total")
+      .select("id, tenant_id, terminal_uid, mra_payload, mra_invoice_number, erp_invoice_number, grand_total")
       .eq("id", job.invoice_id)
       .maybeSingle();
 
@@ -1146,6 +1186,18 @@ export async function handleQueueWorker(): Promise<Response> {
           ),
         })
         .eq("id", terminalUid);
+      const { notifyInvoiceStatus } = await import("./status-webhooks.server");
+      void notifyInvoiceStatus(db, job.tenant_id, {
+        event: "invoice.status_changed",
+        data: {
+          id: invoice["id"],
+          erp_invoice_number: String(invoice["erp_invoice_number"] ?? invoice["mra_invoice_number"] ?? ""),
+          status: "SUBMITTED",
+          mra_invoice_id: invoice["mra_invoice_number"] as string | null,
+          grand_total: Number(invoice["grand_total"] ?? 0),
+          occurred_at: new Date().toISOString(),
+        },
+      });
       submitted += 1;
       continue;
     }
@@ -1164,6 +1216,18 @@ export async function handleQueueWorker(): Promise<Response> {
         .from("sync_queue")
         .update({ status: "dead", last_error: outcome.error })
         .eq("id", job.id);
+      const { notifyInvoiceStatus } = await import("./status-webhooks.server");
+      void notifyInvoiceStatus(db, job.tenant_id, {
+        event: "invoice.status_changed",
+        data: {
+          id: invoice["id"],
+          erp_invoice_number: String(invoice["erp_invoice_number"] ?? invoice["mra_invoice_number"] ?? ""),
+          status: outcome.rejected ? "REJECTED" : "FAILED",
+          grand_total: Number(invoice["grand_total"] ?? 0),
+          last_error: outcome.error,
+          occurred_at: new Date().toISOString(),
+        },
+      });
       dead += 1;
       continue;
     }

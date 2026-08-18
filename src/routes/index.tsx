@@ -96,6 +96,9 @@ function Landing() {
               <Link to="/ops">Open ops console</Link>
             </Button>
             <Button asChild variant="outline">
+              <Link to="/docs">Developer docs</Link>
+            </Button>
+            <Button asChild variant="outline">
               <a href="/api/public/v1/health">Check gateway health</a>
             </Button>
           </div>
